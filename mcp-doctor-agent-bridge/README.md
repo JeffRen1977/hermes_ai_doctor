@@ -100,3 +100,7 @@ npm start
 - `hermes/M3_tool_call_strategy.md`
 
 可直接拷贝到 Hermes 的系统提示词/团队指令中，确保模型先调用 `health_chat_guard`。
+
+## 9) M4 Skills 草案
+
+见 `hermes/skills/`（`daily-health-report`、`lab-result-extraction`），与 `reportModels.js` 的 `sections` Joi 形状对齐。

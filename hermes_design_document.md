@@ -165,7 +165,7 @@ Agent 或 Node cron 生成正文 → `reportRepo` → 模板/订阅消息；超�
 | **M1** | 部署上游 Hermes Agent；`hermes model` 通；`hermes gateway` 通（任选一端）。 |
 | **M2** | doctor-agent 提供 **MCP 或内网 HTTP**：`getHealthContext(userId)` 封装 `buildAIContext`。 |
 | **M3** | 对话路径：**网关消息 → 注入 PHP**（工具拉取或预处理脚本）。 |
-| **M4** | **Skills**：日报章节、化验字段抽取等；与 Node Joi 校验对齐。 |
+| **M4** | **Skills**：日报章节、化验字段抽取等；与 Node Joi 校验对齐（见仓库 `mcp-doctor-agent-bridge/hermes/skills/`）。 |
 | **M5** | **Cron**：日报生成；若走微信，接 Node 发送接口。 |
 | **M6** | 观测、熔断、fallback 云厂商；渗透测试与 MCP 审计。 |
 

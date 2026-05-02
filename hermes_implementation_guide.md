@@ -19,9 +19,10 @@
 | 2 | §3 | 安装 Hermes Agent |
 | 3 | §4–§5 | 模型、网关、安全基线 |
 | 4 | §6 | 与 doctor-agent 对接（MCP 优先） |
-| 5 | §7–§8 | PHP 注入、微信选项 |
-| 6 | §9 | Cron 日报与 Node 回调 |
-| 7 | §10 | 测试与验收 |
+| 5 | §13 | M4：Skills 草案与 Joi 对齐 |
+| 6 | §7–§8 | PHP 注入、微信选项 |
+| 7 | §9 | Cron 日报与 Node 回调 |
+| 8 | §10 | 测试与验收 |
 
 ---
 
@@ -253,7 +254,7 @@ npm start
 ## 9. Cron：每日报告
 
 1. 使用上游 [Cron](https://hermes-agent.nousresearch.com/docs/user-guide/features/cron) 定义自然语言或脚本任务，触发频率如 `0 7 * * *`（时区按服务器）。  
-2. 任务体内：调用 MCP `health_context.get`（全量 options）或 Node `POST /internal/agent/daily-report-input`。  
+2. 任务体内：调用 MCP `health_chat_guard` / `health_context_get`（全量 options）或 Node `POST /internal/agent/daily-report-input`。  
 3. 将生成正文 `POST` 到 Node 的 `reportService` 等价路由（需自行封装认证）。  
 4. Node：`reportRepo` 持久化后调用**微信模板/订阅消息**。
 
@@ -301,6 +302,22 @@ hermes doctor
 | Cron | https://hermes-agent.nousresearch.com/docs/user-guide/features/cron |
 | Security | https://hermes-agent.nousresearch.com/docs/user-guide/security |
 | HermesClaw | https://github.com/AaronWong1999/hermesclaw |
+
+---
+
+## 13. M4：Skills 草案（与 `reportModels` Joi 对齐）
+
+本仓库在 `mcp-doctor-agent-bridge/hermes/skills/` 提供 **可拷贝** 的 Hermes Skill 草案：
+
+| 路径 | 作用 |
+|------|------|
+| `hermes/skills/README.md` | 安装说明与和 doctor-agent 的对齐关系 |
+| `hermes/skills/daily-health-report/SKILL.md` | 日报 / 评估报告：先 `health_chat_guard`，输出 `sections` JSON，再可选 `report_generate` |
+| `hermes/skills/lab-result-extraction/SKILL.md` | 化验文本 → 严格 JSON，禁止编造数值；个体化前仍须过 `health_chat_guard` |
+
+**Joi 对齐要点：** `sections` 的键名与 `ai-doctor-agent_legacy/backend/src/models/reportModels.js` 中 `reportSchema` 一致（`executiveSummary`、`healthMetrics`、`riskAssessment`、`recommendations`、`actionItems`、`charts`、`attachments`）。持久化前 **Node 仍须** `reportSchema.validate`。
+
+**上游文档：** [Skills](https://hermes-agent.nousresearch.com/docs/user-guide/features/skills)
 
 ---
 
