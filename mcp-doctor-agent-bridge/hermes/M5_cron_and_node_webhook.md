@@ -6,7 +6,7 @@
 
 ## 架构 A（推荐）：Hermes Cron → shell → Node
 
-1. 在 doctor-agent 实现 `POST /internal/cron/daily-report`（仅内网 + Bearer 或 mTLS）。
+1. 在 doctor-agent 已实现 **`POST /internal/cron/daily-report`**（Bearer；详见 `hermes_implementation_guide.md` §14）。生产环境请加 **mTLS / 内网隔离**。
 2. 本仓库脚本：`mcp-doctor-agent-bridge/scripts/trigger-node-daily-report.sh`  
    配置 `DOCTOR_AGENT_DAILY_WEBHOOK_URL` 与 `DOCTOR_AGENT_DAILY_WEBHOOK_TOKEN`。
 3. 在 Hermes 里按 [Cron 文档](https://hermes-agent.nousresearch.com/docs/user-guide/features/cron) 创建定时任务，执行该脚本（或等价 `curl` 一行）。
