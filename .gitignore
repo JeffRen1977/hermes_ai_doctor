@@ -1,0 +1,4 @@
+# Legacy app vendored locally; not tracked in this repo (see docs for integration paths).
+ai-doctor-agent_legacy/
+
+.DS_Store
