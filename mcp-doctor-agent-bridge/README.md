@@ -115,3 +115,7 @@ npm start
 
 - 检查清单：`hermes/M6_observability_circuit_mcp_audit.md`
 - 实现指南章节：`hermes_implementation_guide.md` §15
+
+## 12) 仅 Hermes Telegram：个人化对话 + 日报
+
+- 操作说明：`hermes/Telegram_only_personal_chat_and_daily_report.md`

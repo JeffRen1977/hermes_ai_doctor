@@ -251,6 +251,12 @@ npm start
 
 **注意：** 具体「Node → Hermes」的 HTTP API 以上游版本为准；本指南不绑定已删除的 `/v1/chat` 自定义契约。
 
+### 8.3 仅使用 Hermes Telegram（个人化 + 日报）
+
+若主入口是 **Telegram + Hermes**，个人化依赖 **MCP + `userId` 绑定**；日报依赖 **M5 Node cron + `integrations.telegramChatId`**。分步说明见：
+
+- `mcp-doctor-agent-bridge/hermes/Telegram_only_personal_chat_and_daily_report.md`
+
 ---
 
 ## 9. Cron：每日报告（设计摘要）
