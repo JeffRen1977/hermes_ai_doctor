@@ -108,5 +108,10 @@ npm start
 ## 10) M5 Cron → Node 回调（示例）
 
 - 说明：`hermes/M5_cron_and_node_webhook.md`（**日报推送默认写 Telegram**；微信为可选）
-- 脚本：`scripts/trigger-node-daily-report.sh`（需自行实现 Node 内 `POST /internal/cron/daily-report` 等路由）
+- 脚本：`scripts/trigger-node-daily-report.sh`（叫醒 **`POST /internal/cron/daily-report`**；doctor-agent 侧已实现）
 - 脚本说明：`scripts/README.md`
+
+## 11) M6 观测 / 熔断 / MCP 审计
+
+- 检查清单：`hermes/M6_observability_circuit_mcp_audit.md`
+- 实现指南章节：`hermes_implementation_guide.md` §15

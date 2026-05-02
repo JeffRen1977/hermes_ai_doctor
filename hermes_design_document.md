@@ -167,7 +167,7 @@ Agent 或 Node cron 生成正文 → `reportRepo` → **Telegram** 摘要/链接
 | **M3** | 对话路径：**网关消息 → 注入 PHP**（工具拉取或预处理脚本）。 |
 | **M4** | **Skills**：日报章节、化验字段抽取等；与 Node Joi 校验对齐（见仓库 `mcp-doctor-agent-bridge/hermes/skills/`）。 |
 | **M5** | **Cron**：日报生成；**当前推送为 Telegram**（Node Bot API 或 Hermes gateway）；微信若启用仍由 Node 发送（示例见 `mcp-doctor-agent-bridge/hermes/M5_cron_and_node_webhook.md` 与 `scripts/`）。 |
-| **M6** | 观测、熔断、fallback 云厂商；渗透测试与 MCP 审计。 |
+| **M6** | 观测、熔断、fallback 云厂商；渗透测试与 MCP 审计（清单见 `mcp-doctor-agent-bridge/hermes/M6_observability_circuit_mcp_audit.md`）。 |
 
 ---
 
@@ -176,7 +176,7 @@ Agent 或 Node cron 生成正文 → `reportRepo` → **Telegram** 摘要/链接
 1. 上游 `hermes doctor` 无阻塞性错误；网关可收发信息。  
 2. 从测试用户发消息到回复，链路中 **MCP/注入** 能证明携带了 `userId` 对应上下文（自动化可测 mock）。  
 3. 关闭 MCP 或故意失败时，**不出现**伪造个体化诊断。  
-4. 每日报告任务至少一次端到端（测试环境可 stub 微信）。  
+4. 每日报告任务至少一次端到端（测试环境可 stub **Telegram** 或记录 Bot API 成功响应）。  
 5. PHI 默认不出现在 Agent 持久化明文配置与错误上报中。
 
 ---

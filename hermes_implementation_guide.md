@@ -21,9 +21,10 @@
 | 4 | §6 | 与 doctor-agent 对接（MCP 优先） |
 | 5 | §13 | M4：Skills 草案与 Joi 对齐 |
 | 6 | §14 | M5：Cron + Node webhook（日报 / **Telegram**） |
-| 7 | §7–§8 | PHP 注入、微信选项 |
-| 8 | §9 | Cron 日报与 Node 回调（摘要） |
-| 9 | §10 | 测试与验收 |
+| 7 | §15 | M6：观测、熔断、MCP 审计 |
+| 8 | §7–§8 | PHP 注入、微信选项 |
+| 9 | §9 | Cron 日报与 Node 回调（摘要） |
+| 10 | §10 | 测试与验收 |
 
 ---
 
@@ -275,7 +276,8 @@ hermes doctor
 ### 10.2 集成测试建议
 
 - **MCP**：Mock `buildAIContext`，断言工具返回包含 `medications` / `vitalsRecent` 字段。  
-- **E2E（staging）**：测试用户发 Telegram 消息，日志中 `traceId` 与 `userId` 关联，且无完整 PHI 明文落盘。
+- **E2E（staging）**：测试用户发 Telegram 消息，日志中 `traceId` 与 `userId` 关联，且无完整 PHI 明文落盘。  
+- **M6**：按 §15 与 `hermes/M6_observability_circuit_mcp_audit.md` 第四节验收勾选项过一遍。
 
 ### 10.3 doctor-agent 现有单测
 
@@ -356,6 +358,40 @@ hermes doctor
 
 - Staging：手动执行脚本一次，Node 返回 200，报告入库（或 dry-run 日志）。  
 - Telegram：测试用户 `chat_id` 收到至少一条日报摘要（或记录 Bot API `message_id`）。若同时上微信，再测模板消息一条。
+
+---
+
+## 15. M6：观测、熔断、MCP 审计
+
+### 15.1 文档与清单
+
+完整检查清单见：**`mcp-doctor-agent-bridge/hermes/M6_observability_circuit_mcp_audit.md`**（Hermes + Node + MCP bridge 三侧；含验收勾选项）。
+
+### 15.2 与本仓库组件的对应关系
+
+| 组件 | M6 要点 |
+|------|---------|
+| **Hermes（上游）** | 日志/健康检查/工具策略；遵循 [Security](https://hermes-agent.nousresearch.com/docs/user-guide/security) |
+| **`mcp-doctor-agent-bridge`** | stderr 日志、`MCP_ALLOWED_USER_IDS`、上下文长度截断；避免 stdout 打调试 PHI |
+| **doctor-agent** | `/internal/cron/*` 仅内网；Bearer 轮换；LLM 超时与已有重试；可选 Sentry/OTel |
+| **Cron 脚本** | 失败退避；勿高频触发全量日报 |
+
+### 15.3 熔断（建议策略）
+
+- **LLM**：主模型连续失败 → Hermes 切换备用 provider/model；doctor-agent 侧保持现有 `analyzeHealthRecordsWithRetry` 等行为。  
+- **MCP**：对 `buildAIContext` 连续超时 → 短期拒绝新工具调用或返回降级（与 `health_chat_guard` 一致）。  
+- **Telegram**：Bot API 429 时尊重 `retry_after`，批量发送加间隔。
+
+### 15.4 MCP 审计（最低要求）
+
+- 每条工具调用记录：`timestamp`、`tool_name`、**userId 哈希或长度**、`success`、`latency_ms`、错误类型；**不**默认记录 `payload` / `systemPromptContext` 全文。  
+- 生产环境 **强制** `MCP_ALLOWED_USER_IDS`，直至有更强的按会话绑定 `userId` 机制。
+
+### 15.5 渗透与安全测试
+
+- 自测：`/internal/cron/daily-report` 无 Bearer → 401；错误 Bearer → 401；无配置 token → 503。  
+- 外网扫描：确认 internal 路由不可从公网访问。  
+- MCP：确认无法通过篡改参数访问未授权 `userId`（白名单开启时）。
 
 ---
 
