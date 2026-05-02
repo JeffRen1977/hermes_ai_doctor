@@ -334,11 +334,14 @@ hermes doctor
 
 ### 14.2 推荐集成：Hermes Cron → `curl` → Node
 
-1. 在 doctor-agent 增加内网路由，例如 `POST /internal/cron/daily-report`，校验 `Authorization: Bearer <token>` 或 mTLS。  
-2. 路由内：遍历订阅用户 → `buildAIContext`（options 全开）→ 调 LLM 或使用 MCP（若你从 Node 进程调本地工具）→ 写 `reportRepo` → **Telegram 发送**（或再走 Hermes gateway）。  
-3. 本仓库提供示例脚本：`mcp-doctor-agent-bridge/scripts/trigger-node-daily-report.sh`  
-   环境变量：`DOCTOR_AGENT_DAILY_WEBHOOK_URL`、`DOCTOR_AGENT_DAILY_WEBHOOK_TOKEN`（见 `mcp-doctor-agent-bridge/.env.example`）。  
-4. Hermes Cron 配置：按上游文档让任务**执行该脚本**；详细叙述见 `mcp-doctor-agent-bridge/hermes/M5_cron_and_node_webhook.md`。
+1. **已实现（`ai-doctor-agent_legacy`）**：`POST /internal/cron/daily-report`  
+   - 鉴权：`Authorization: Bearer <token>`，token 取 **`INTERNAL_CRON_BEARER_TOKEN`** 或 **`DOCTOR_AGENT_DAILY_WEBHOOK_TOKEN`**（与叫醒脚本一致）。未配置 token 时返回 **503**。  
+   - 用户列表：请求体 **`{ "userEmails": ["a@b.com"] }`**，或环境变量 **`CRON_DAILY_REPORT_USER_EMAILS`**（逗号分隔）。无用户时返回 200 与说明，不抛错。  
+   - 流程：`buildAIContext`（全开）→ 无基础档案则跳过 → **`reportService.generateHealthAssessmentReport`**（已含 `reportRepo` 持久化）→ **`TELEGRAM_BOT_TOKEN` + `userSettings.integrations.telegramChatId`** 发摘要；`?dryRun=true` 或 body `dryRun:true` 只演练不写库、不调 Telegram。  
+   - 微信：`WECHAT_DAILY_REPORT_ENABLED=true` 时仅占位返回未实现；正式微信请另接模板消息 SDK。  
+2. 本仓库叫醒脚本：`mcp-doctor-agent-bridge/scripts/trigger-node-daily-report.sh`  
+   - `DOCTOR_AGENT_DAILY_WEBHOOK_URL` 指向例如 `http://127.0.0.1:8000/internal/cron/daily-report`（以 doctor-agent 实际端口为准）。  
+3. Hermes Cron：按上游文档执行该脚本；说明见 `mcp-doctor-agent-bridge/hermes/M5_cron_and_node_webhook.md`。
 
 ### 14.3 备选：仅 Node cron
 
