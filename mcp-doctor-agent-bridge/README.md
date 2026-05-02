@@ -33,6 +33,19 @@ npm start
 - `health_context_prompt`
   - 入参：`{ userId, options }`
   - 出参：`{ userId, systemPromptContext }`
+- `health_chat_guard`
+  - 入参：`{ userId, options }`
+  - 出参：`{ canAnswerHealthQuestion, fallbackMessage, contextResult? }`
+  - 用途：M3 强制个体化守卫；上下文加载失败时统一降级文案
+- `health_analyze_text`
+  - 入参：`{ userId, text, options }`
+  - 出参：`aiServiceFactory.analyzeHealthRecords` 结果
+- `risk_detect_anomalies`
+  - 入参：`{ userEmail, dataStream, options }`
+  - 出参：`riskMonitoringService.detectAnomalies` 结果
+- `report_generate`
+  - 入参：`{ userEmail, reportType, options }`
+  - 出参：`reportService` 生成结果（包含持久化后的报告对象）
 
 `options` 对应 `buildAIContext`：
 
@@ -66,3 +79,24 @@ npm start
 ```
 
 > 注意：Hermes 实际配置文件位置和字段请以官方文档为准。
+
+## 6) 建议调用顺序（对话场景）
+
+1. 先调 `health_chat_guard`（M3 守卫）
+2. 若 `canAnswerHealthQuestion=false`，直接返回 `fallbackMessage`
+3. 若 `canAnswerHealthQuestion=true`，再生成健康回答
+4. 需要深分析时调 `health_analyze_text`
+5. 风险相关问题可调 `risk_detect_anomalies`
+
+## 7) 建议调用顺序（每日报告）
+
+1. 调 `health_context_get` 获取基础档案
+2. 需要趋势判断时调 `risk_detect_anomalies`
+3. 调 `report_generate` 生成并入库报告
+
+## 8) M3 模板文件
+
+- `hermes/M3_system_prompt_template.md`
+- `hermes/M3_tool_call_strategy.md`
+
+可直接拷贝到 Hermes 的系统提示词/团队指令中，确保模型先调用 `health_chat_guard`。

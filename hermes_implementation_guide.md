@@ -163,6 +163,34 @@ npm start
 - **输出**：`{ userId, systemPromptContext }`
 - **用途**：只需要拼 system prompt 时，减少 token 与工具返回体积。
 
+#### Tool C: `health_analyze_text`
+
+- **输入**：`{ userId, text, options }`
+- **内部逻辑**：`aiServiceFactory.analyzeHealthRecords({ documents:[{text}] }, { provider, model })`
+- **用途**：把 doctor-agent 现有「文本健康分析」能力直接作为 MCP 工具暴露给 Hermes。
+
+#### Tool C-0: `health_chat_guard`（M3 必选）
+
+- **输入**：`{ userId, options }`
+- **输出**：`{ canAnswerHealthQuestion, fallbackMessage, contextResult? }`
+- **内部逻辑**：
+  1) 调 `buildAIContext` + `formatContextForSystemPrompt`  
+  2) 若上下文为空或仅占位（例如 `暂无基础档案信息。`），返回 `canAnswerHealthQuestion=false`  
+  3) 上下文可用时返回 `contextResult`
+- **用途**：确保健康问答链路先做个人化上下文检查；失败统一降级文案。
+
+#### Tool D: `risk_detect_anomalies`
+
+- **输入**：`{ userEmail, dataStream, options }`
+- **内部逻辑**：`riskMonitoringService.detectAnomalies(userEmail, dataStream, options)`
+- **用途**：对接可穿戴/流式数据风险检测，不重复实现规则 + LLM 混合逻辑。
+
+#### Tool E: `report_generate`
+
+- **输入**：`{ userEmail, reportType, options }`
+- **内部逻辑**：`reportService.generateHealthAssessmentReport` 或 `generateComprehensiveReport`
+- **用途**：把每日报告/综合报告生成与持久化能力作为 MCP 动作工具。
+
 ### 6.4 Hermes Agent 侧接入方式
 
 通过上游 MCP 配置把该 server 注册为本地 command（示例见 `mcp-doctor-agent-bridge/README.md`）。核心是：
@@ -173,8 +201,10 @@ npm start
 
 然后在 Persona / 指令中明确约束：
 
-- 回答健康问题前，先调用 `health_context_get` 或 `health_context_prompt`
-- 若工具失败，返回“无法加载您的健康档案，请稍后重试”，而不是直接给个体化结论
+- 回答健康问题前，必须先调用 `health_chat_guard`
+- 若 `canAnswerHealthQuestion=false`，直接返回 `fallbackMessage`
+- 若 `canAnswerHealthQuestion=true`，优先使用 `contextResult.systemPromptContext`
+- 示例模板见：`mcp-doctor-agent-bridge/hermes/M3_system_prompt_template.md` 与 `mcp-doctor-agent-bridge/hermes/M3_tool_call_strategy.md`
 
 ### 6.5 安全要求（MCP 版本）
 
@@ -182,6 +212,7 @@ npm start
 - **最小权限**：`MCP_ALLOWED_USER_IDS` 在测试阶段强制白名单。  
 - **审计日志**：记录 `traceId/userId/toolName`，不记录完整 PHI 文本。  
 - **失败降级**：工具报错时禁止生成个体化医学建议。
+- **动作工具隔离**：`risk_detect_anomalies`、`report_generate` 属于有副作用工具，建议在 Hermes 工具策略里设为“显式允许后调用”（避免误触发写入/推送链路）。
 
 ### 6.6 备选：内网 HTTPS（与 MCP 并存）
 
