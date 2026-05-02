@@ -1,35 +1,30 @@
 /**
- * Hermes Agent adapter — drop into doctor-agent:
- *   backend/src/services/adapters/hermesService.js
- *
- * Register in aiServiceFactory.js:
- *   const hermesService = require('./adapters/hermesService');
- *   this.adapters = { ..., hermes: hermesService };
- * And add a hermes branch in checkAvailableServices() when isServiceAvailable() is true.
- *
- * Env: HERMES_AGENT_URL, HERMES_AGENT_TOKEN (same value as Hermes Agent INTERNAL_TOKEN)
+ * Hermes Agent（自托管）适配器 — 调用 FastAPI /v1/*。
+ * 环境变量：HERMES_AGENT_URL、HERMES_AGENT_TOKEN（与 Agent INTERNAL_TOKEN 一致）
  */
 
-let _availabilityCache = { at: 0, ok: false };
+const contextBuilderService = require('../contextBuilderService');
 
 function _baseUrl() {
   return (process.env.HERMES_AGENT_URL || '').replace(/\/$/, '');
 }
 
 function _headers() {
-  const token = process.env.HERMES_AGENT_TOKEN || '';
   return {
     'Content-Type': 'application/json',
-    'X-Internal-Token': token,
+    'X-Internal-Token': process.env.HERMES_AGENT_TOKEN || '',
   };
 }
 
-/** Sync gate for aiServiceFactory: URL + token set. Optional async probe updates cache. */
+function sanitizeUserId(userEmail) {
+  return (userEmail || '').replace(/[^a-zA-Z0-9@._-]/g, '_');
+}
+
 function isServiceAvailable() {
   return Boolean(_baseUrl() && process.env.HERMES_AGENT_TOKEN);
 }
 
-async function _probeHealthAsync() {
+async function refreshAvailabilityCache() {
   const base = _baseUrl();
   if (!base) return false;
   const u = new URL('/v1/health', `${base}/`);
@@ -45,42 +40,18 @@ async function _probeHealthAsync() {
   }
 }
 
-/** Optional: call before listing providers to confirm Agent is up (async). */
-async function refreshAvailabilityCache() {
-  const ok = await _probeHealthAsync();
-  _availabilityCache = { at: Date.now(), ok };
-  return ok;
-}
-
 function getAvailableModels() {
   const m = process.env.HERMES_DEFAULT_MODEL || 'llama3.2';
   return { text: [m], all: [m] };
 }
 
-function _notImplemented(name) {
-  return { success: false, error: `Hermes adapter: ${name} is not implemented yet; use another provider for this step.` };
-}
-
-async function healthChat(message, context = '', options = {}) {
+async function _postJson(path, body, timeoutMs) {
   const base = _baseUrl();
   if (!base || !process.env.HERMES_AGENT_TOKEN) {
-    return { success: false, error: 'HERMES_AGENT_URL or HERMES_AGENT_TOKEN not configured' };
+    return { ok: false, status: 0, data: { error: 'HERMES_AGENT_URL or HERMES_AGENT_TOKEN not configured' } };
   }
-  const language = options.language || 'zh';
-  const body = {
-    message,
-    context: context || '',
-    language: language === 'en' ? 'en' : 'zh',
-    options: {
-      model: options.model || undefined,
-      temperature: options.temperature,
-      maxTokens: options.maxTokens,
-      stream: false,
-    },
-  };
-  const url = `${base}/v1/chat`;
+  const url = `${base}${path.startsWith('/') ? path : `/${path}`}`;
   const ac = new AbortController();
-  const timeoutMs = Number(process.env.HERMES_CHAT_TIMEOUT_MS || 120000);
   const timer = setTimeout(() => ac.abort(), timeoutMs);
   try {
     const res = await fetch(url, {
@@ -90,68 +61,210 @@ async function healthChat(message, context = '', options = {}) {
       signal: ac.signal,
     });
     const data = await res.json().catch(() => ({}));
-    if (!res.ok) {
-      return { success: false, error: data.detail || data.error || `HTTP ${res.status}` };
-    }
-    if (data.success === false) {
-      return { success: false, error: data.error || 'Hermes chat failed' };
-    }
-    return {
-      success: true,
-      message: data.message,
-      model: data.model,
-      provider: 'hermes',
-    };
+    return { ok: res.ok, status: res.status, data };
   } catch (e) {
-    return { success: false, error: e.message || String(e) };
+    return { ok: false, status: 0, data: { error: e.message || String(e) } };
   } finally {
     clearTimeout(timer);
   }
 }
 
+/** 与 chat 路由一致：全量扩展用于分析类调用 */
+const DEFAULT_CONTEXT_FLAGS = {
+  medications: true,
+  vitalsRecent: true,
+  chatRecent: true,
+  exerciseRecent: true,
+  wearableSummary: true,
+  riskAlertsRecent: true,
+  nutritionRecent: false,
+};
+
+async function _buildPersonalContext(userIdOrEmail, language) {
+  const userId = sanitizeUserId(userIdOrEmail);
+  const payload = await contextBuilderService.buildAIContext(userId, {
+    ...DEFAULT_CONTEXT_FLAGS,
+    language: language || 'zh',
+  });
+  const context = contextBuilderService.formatContextForSystemPrompt(payload);
+  return { context, payload };
+}
+
+async function healthChat(message, context = '', options = {}) {
+  const timeoutMs = Number(process.env.HERMES_CHAT_TIMEOUT_MS || 120000);
+  const body = {
+    message,
+    context: context || '',
+    language: options.language === 'en' ? 'en' : 'zh',
+    options: {
+      model: options.model || undefined,
+      temperature: options.temperature,
+      maxTokens: options.maxTokens,
+      stream: false,
+    },
+  };
+  const { ok, data } = await _postJson('/v1/chat', body, timeoutMs);
+  if (!ok) {
+    return { success: false, error: data.detail || data.error || 'Hermes chat request failed' };
+  }
+  if (data.success === false) {
+    return { success: false, error: data.error || 'Hermes chat failed' };
+  }
+  return {
+    success: true,
+    message: data.message,
+    model: data.model,
+    provider: 'hermes',
+  };
+}
+
 async function analyzeHealthRecords(healthData, options = {}) {
-  void healthData;
-  void options;
-  return _notImplemented('analyzeHealthRecords');
+  const timeoutMs = Number(process.env.HERMES_ANALYZE_TIMEOUT_MS || 180000);
+  let context = options.context || '';
+  let payload = options.payload || null;
+  const email = options.userEmail || options.userId || healthData?.userProfile?.email;
+  if (email && !context) {
+    try {
+      const built = await _buildPersonalContext(email, options.language || 'zh');
+      context = built.context;
+      payload = built.payload;
+    } catch (e) {
+      console.warn('hermesService analyzeHealthRecords: buildAIContext failed', e.message);
+    }
+  }
+  const body = {
+    healthData,
+    context,
+    payload,
+    userId: options.userId || null,
+    language: options.language === 'en' ? 'en' : 'zh',
+    options: {
+      model: options.model,
+      temperature: options.temperature,
+      maxTokens: options.maxTokens,
+    },
+    traceId: options.traceId,
+  };
+  const { ok, data } = await _postJson('/v1/analyze/records', body, timeoutMs);
+  if (!ok) {
+    return { success: false, error: data.detail || data.error || 'Hermes analyze failed', provider: 'hermes' };
+  }
+  if (data.success === false) {
+    return { success: false, error: data.error || 'Hermes analyze failed', provider: 'hermes' };
+  }
+  return {
+    success: true,
+    analysis: data.analysis,
+    model: data.model || 'default',
+    provider: 'hermes',
+    timestamp: new Date().toISOString(),
+  };
+}
+
+async function analyzeDiet(foodItems, userHealthData = {}, options = {}) {
+  const timeoutMs = Number(process.env.HERMES_ANALYZE_TIMEOUT_MS || 180000);
+  let context = options.context || '';
+  let payload = options.payload || null;
+  if (options.userId && !context) {
+    try {
+      const built = await _buildPersonalContext(options.userId, options.language || 'zh');
+      context = built.context;
+      payload = built.payload;
+    } catch (e) {
+      console.warn('hermesService analyzeDiet: buildAIContext failed', e.message);
+    }
+  }
+  const body = {
+    foodItems: foodItems || [],
+    userHealthData: userHealthData || {},
+    context,
+    payload,
+    language: options.language === 'en' ? 'en' : 'zh',
+    options: { model: options.model, temperature: options.temperature, maxTokens: options.maxTokens },
+  };
+  const { ok, data } = await _postJson('/v1/analyze/diet', body, timeoutMs);
+  if (!ok || data.success === false) {
+    return { success: false, error: data.error || data.detail || 'Hermes diet analyze failed' };
+  }
+  return { success: true, analysis: data.analysis };
+}
+
+async function analyzeSymptoms(symptoms, userProfile = {}, options = {}) {
+  const timeoutMs = Number(process.env.HERMES_ANALYZE_TIMEOUT_MS || 180000);
+  let context = options.context || '';
+  let payload = options.payload || null;
+  const uid = options.userId || userProfile.email || userProfile.userId;
+  if (uid && !context) {
+    try {
+      const built = await _buildPersonalContext(uid, options.language || 'zh');
+      context = built.context;
+      payload = built.payload;
+    } catch (e) {
+      console.warn('hermesService analyzeSymptoms: buildAIContext failed', e.message);
+    }
+  }
+  const body = {
+    symptoms: typeof symptoms === 'string' ? symptoms : JSON.stringify(symptoms),
+    userProfile,
+    context,
+    payload,
+    language: options.language === 'en' ? 'en' : 'zh',
+    options: { model: options.model, temperature: options.temperature, maxTokens: options.maxTokens },
+  };
+  const { ok, data } = await _postJson('/v1/analyze/symptoms', body, timeoutMs);
+  if (!ok || data.success === false) {
+    return { success: false, error: data.error || data.detail || 'Hermes symptoms analyze failed' };
+  }
+  return { success: true, analysis: data.analysis };
+}
+
+async function checkDrugInteractions(medications, options = {}) {
+  const timeoutMs = Number(process.env.HERMES_ANALYZE_TIMEOUT_MS || 180000);
+  let context = options.context || '';
+  let payload = options.payload || null;
+  if (options.userId && !context) {
+    try {
+      const built = await _buildPersonalContext(options.userId, options.language || 'zh');
+      context = built.context;
+      payload = built.payload;
+    } catch (e) {
+      console.warn('hermesService checkDrugInteractions: buildAIContext failed', e.message);
+    }
+  }
+  const body = {
+    medications: medications || [],
+    context,
+    payload,
+    language: options.language === 'en' ? 'en' : 'zh',
+    options: { model: options.model, temperature: options.temperature, maxTokens: options.maxTokens },
+  };
+  const { ok, data } = await _postJson('/v1/analyze/drug-interactions', body, timeoutMs);
+  if (!ok || data.success === false) {
+    return { success: false, error: data.error || data.detail || 'Hermes drug check failed' };
+  }
+  return { success: true, analysis: data.analysis };
 }
 
 async function analyzePDFDocument(base64PDF, options = {}) {
   void base64PDF;
   void options;
-  return _notImplemented('analyzePDFDocument');
+  return {
+    success: false,
+    error: 'Hermes adapter: use gemini/openai for PDF extraction; then analyzeHealthRecords with Hermes on text.',
+  };
 }
 
 async function extractTextFromImage(base64Image, options = {}) {
   void base64Image;
   void options;
-  return _notImplemented('extractTextFromImage');
+  return { success: false, error: 'Hermes adapter: use gemini/openai for image OCR in v1.' };
 }
 
 async function analyzeImageWithAI(base64Image, prompt, options = {}) {
   void base64Image;
   void prompt;
   void options;
-  return _notImplemented('analyzeImageWithAI');
-}
-
-async function analyzeDiet(foodItems, userHealthData = {}, options = {}) {
-  void foodItems;
-  void userHealthData;
-  void options;
-  return _notImplemented('analyzeDiet');
-}
-
-async function analyzeSymptoms(symptoms, userProfile = {}, options = {}) {
-  void symptoms;
-  void userProfile;
-  void options;
-  return _notImplemented('analyzeSymptoms');
-}
-
-async function checkDrugInteractions(medications, options = {}) {
-  void medications;
-  void options;
-  return _notImplemented('checkDrugInteractions');
+  return { success: false, error: 'Hermes adapter: multimodal image+prompt not implemented in v1.' };
 }
 
 module.exports = {

@@ -5,6 +5,7 @@ import logging
 from fastapi import FastAPI, Request
 from fastapi.responses import JSONResponse
 
+from app.api.v1_analyze import router as v1_analyze_router
 from app.api.v1_chat import router as v1_router
 from app.config import get_settings
 
@@ -13,6 +14,7 @@ logger = logging.getLogger(__name__)
 
 app = FastAPI(title="Hermes Agent", version="0.1.0")
 app.include_router(v1_router)
+app.include_router(v1_analyze_router)
 
 
 @app.middleware("http")
