@@ -1,6 +1,8 @@
-# M5 — Hermes Cron + Node webhook (daily report → WeChat)
+# M5 — Hermes Cron + Node webhook（日报 → **Telegram**）
 
-设计目标：**定时触发**在 **Node（doctor-agent）** 内完成「取数 → 生成 → 入库 → 微信模板/订阅消息」；Hermes Cron 只负责**可靠唤醒**与可选的自然语言提醒。
+设计目标：**定时触发**在 **Node（doctor-agent）** 内完成「取数 → 生成 → 入库 → **Telegram 推送摘要/链接**」；Hermes Cron 只负责**可靠唤醒**与可选的自然语言提醒。
+
+> 若日后改为微信模板消息，只需把 Node 内「发送」实现从 **Telegram Bot API** 换成 **微信公众平台接口**；webhook 与 Cron 触发方式不变。
 
 ## 架构 A（推荐）：Hermes Cron → shell → Node
 
@@ -17,7 +19,7 @@
 
 ## 架构 B：Node cron only
 
-用 `node-cron` / 云 Scheduler 直接调同一 webhook，**不经过** Hermes；Hermes 只负责对话与 MCP。适合日报与微信强耦合、不想依赖 Hermes 进程常驻的场景。
+用 `node-cron` / 云 Scheduler 直接调同一 webhook，**不经过** Hermes；Hermes 只负责对话与 MCP。适合日报与 **Telegram（或自有推送）** 强耦合、不想依赖 Hermes 进程常驻的场景。
 
 ## 请求体约定（示例）
 
@@ -31,10 +33,20 @@ Node 可接受最小 JSON（你可扩展为批量 userId 列表）：
 }
 ```
 
-## 微信送达
+## Telegram 送达（当前默认）
 
-- 模板消息 / 订阅消息 **必须在 Node** 完成（持有 `access_token` 与合规字段）。
-- Hermes 若走 Telegram/邮件，与微信是**并行渠道**，不要假设 Hermes 能直接发微信模板消息。
+任选其一（团队定一种即可）：
+
+1. **Node 发 Telegram（常见）**  
+   - Node 在完成 `reportRepo` 后，用 **BotFather 的 bot token** 调 [Telegram Bot API](https://core.telegram.org/bots/api)（如 `sendMessage`），把日报摘要发给用户已绑定的 `chat_id`。  
+   - 用户绑定：`chat_id` 存 doctor-agent 用户设置或独立映射表（实施时自建）。
+
+2. **Hermes gateway 发 Telegram**  
+   - 若日报正文已由 Hermes 生成且你希望少写 Node 发送代码，可由 Hermes Cron 在生成后通过已登录的 **Messaging Gateway** 投递到 Telegram；**持久化仍建议在 Node**（避免「只在聊天里有一份」）。
+
+## 微信（可选）
+
+- 模板消息 / 订阅消息仍在 **Node** 完成（`access_token` 等）；与 Telegram **并行渠道**，按需切换或并存。
 
 ## 安全
 

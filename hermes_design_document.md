@@ -102,7 +102,7 @@
 ### 5.2 触发方式
 
 1. **事件驱动**：新数据写入后，Node 侧 `riskMonitoringService` 等；可选 **webhook** 通知 Agent 会话或写入 context file。
-2. **定时驱动**：优先用 Hermes **Cron** 表达「每日 07:00 生成日报」；**微信送达**若不能走网关直发，则由 Cron 调 **Node 内部任务 URL**（带服务账号 JWT 或 mTLS），由 Node 调用 `reportService` + 微信接口。
+2. **定时驱动**：优先用 Hermes **Cron** 表达「每日 07:00 生成日报」；**推送**（当前为 **Telegram**；微信为可选）若需落库与合规控制，由 Cron 调 **Node 内部任务 URL**（带服务账号 JWT 或 mTLS），由 Node 调用 `reportService` + 对应渠道接口（Telegram Bot API / 微信模板消息等）。
 3. **用户主动**：网关注入当次消息的 **PHP**（§1.2）。
 
 ---
@@ -153,7 +153,7 @@
 
 ### 9.4 每日报告
 
-Agent 或 Node cron 生成正文 → `reportRepo` → 模板/订阅消息；超长用摘要 + 短链只读页。
+Agent 或 Node cron 生成正文 → `reportRepo` → **Telegram** 摘要/链接（或模板/订阅消息若走微信）；超长用摘要 + 短链只读页。
 
 ---
 
@@ -166,7 +166,7 @@ Agent 或 Node cron 生成正文 → `reportRepo` → 模板/订阅消息；超�
 | **M2** | doctor-agent 提供 **MCP 或内网 HTTP**：`getHealthContext(userId)` 封装 `buildAIContext`。 |
 | **M3** | 对话路径：**网关消息 → 注入 PHP**（工具拉取或预处理脚本）。 |
 | **M4** | **Skills**：日报章节、化验字段抽取等；与 Node Joi 校验对齐（见仓库 `mcp-doctor-agent-bridge/hermes/skills/`）。 |
-| **M5** | **Cron**：日报生成；若走微信，接 Node 发送接口（示例见 `mcp-doctor-agent-bridge/hermes/M5_cron_and_node_webhook.md` 与 `mcp-doctor-agent-bridge/scripts/`）。 |
+| **M5** | **Cron**：日报生成；**当前推送为 Telegram**（Node Bot API 或 Hermes gateway）；微信若启用仍由 Node 发送（示例见 `mcp-doctor-agent-bridge/hermes/M5_cron_and_node_webhook.md` 与 `scripts/`）。 |
 | **M6** | 观测、熔断、fallback 云厂商；渗透测试与 MCP 审计。 |
 
 ---

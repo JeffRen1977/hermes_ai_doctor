@@ -5,7 +5,7 @@
 **遗留后端：** `ai-doctor-agent_legacy/backend`（路径以本仓库为准；该目录可能被根 `.gitignore` 忽略，变更需在对应仓库提交）  
 **最后更新：** 2026-05-01  
 
-本文档面向**实施工程师**：基于 **[NousResearch/hermes-agent](https://github.com/NousResearch/hermes-agent)** 的安装与配置，说明如何与 `ai-doctor-agent_legacy` 对接（MCP / 内网 HTTP / Cron / 微信），**不包含**本仓库已移除的自定义 `hermes-agent/` FastAPI 服务。
+本文档面向**实施工程师**：基于 **[NousResearch/hermes-agent](https://github.com/NousResearch/hermes-agent)** 的安装与配置，说明如何与 `ai-doctor-agent_legacy` 对接（MCP / 内网 HTTP / Cron / **Telegram** / 微信可选），**不包含**本仓库已移除的自定义 `hermes-agent/` FastAPI 服务。
 
 **必读上游文档：** [hermes-agent.nousresearch.com/docs](https://hermes-agent.nousresearch.com/docs/)
 
@@ -20,7 +20,7 @@
 | 3 | §4–§5 | 模型、网关、安全基线 |
 | 4 | §6 | 与 doctor-agent 对接（MCP 优先） |
 | 5 | §13 | M4：Skills 草案与 Joi 对齐 |
-| 6 | §14 | M5：Cron + Node webhook（日报 / 微信） |
+| 6 | §14 | M5：Cron + Node webhook（日报 / **Telegram**） |
 | 7 | §7–§8 | PHP 注入、微信选项 |
 | 8 | §9 | Cron 日报与 Node 回调（摘要） |
 | 9 | §10 | 测试与验收 |
@@ -256,7 +256,7 @@ npm start
 
 1. 使用上游 [Cron](https://hermes-agent.nousresearch.com/docs/user-guide/features/cron) 或 **Node 自带调度** 触发每日任务。  
 2. **个体化数据**仍由 Node：`buildAIContext` / `reportService`；Hermes 侧可选只负责叙事草稿（经 MCP）或完全不参与。  
-3. **微信送达**必须在 Node 完成（模板/订阅消息、`access_token`）。  
+3. **推送送达**：当前以 **Telegram** 为主（Node 调 Bot API 或 Hermes gateway 投递）；若上微信，模板/订阅消息仍在 Node（`access_token`）。  
 
 **M5 落地文件（本仓库）：** 见 §14。
 
@@ -323,18 +323,19 @@ hermes doctor
 
 ---
 
-## 14. M5：Cron + Node webhook（日报 → 微信）
+## 14. M5：Cron + Node webhook（日报 → **Telegram**）
 
 ### 14.1 目标
 
 - **定时**：每天固定时刻触发（如 `0 7 * * *`）。  
 - **生成与持久化**：在 **doctor-agent** 内调用 `reportService` / `reportRepo`（与现有 Joi 一致）。  
-- **微信**：Node 调用公众平台接口发模板/订阅消息；**不要**假设 Hermes 能直接代发微信模板消息。
+- **Telegram**：日报摘要/链接由 **Node 调 Telegram Bot API**（`sendMessage` + 用户绑定 `chat_id`）或 **Hermes gateway** 投递；与微信二选一或并存时，以你当前产品为准（本文按 **Telegram 为主**）。  
+- **微信（可选）**：若启用，Node 调用公众平台接口发模板/订阅消息；**不要**假设 Hermes 能直接代发微信模板消息。
 
 ### 14.2 推荐集成：Hermes Cron → `curl` → Node
 
 1. 在 doctor-agent 增加内网路由，例如 `POST /internal/cron/daily-report`，校验 `Authorization: Bearer <token>` 或 mTLS。  
-2. 路由内：遍历订阅用户 → `buildAIContext`（options 全开）→ 调 LLM 或使用 MCP（若你从 Node 进程调本地工具）→ 写 `reportRepo` → 调微信发送。  
+2. 路由内：遍历订阅用户 → `buildAIContext`（options 全开）→ 调 LLM 或使用 MCP（若你从 Node 进程调本地工具）→ 写 `reportRepo` → **Telegram 发送**（或再走 Hermes gateway）。  
 3. 本仓库提供示例脚本：`mcp-doctor-agent-bridge/scripts/trigger-node-daily-report.sh`  
    环境变量：`DOCTOR_AGENT_DAILY_WEBHOOK_URL`、`DOCTOR_AGENT_DAILY_WEBHOOK_TOKEN`（见 `mcp-doctor-agent-bridge/.env.example`）。  
 4. Hermes Cron 配置：按上游文档让任务**执行该脚本**；详细叙述见 `mcp-doctor-agent-bridge/hermes/M5_cron_and_node_webhook.md`。
@@ -351,7 +352,7 @@ hermes doctor
 ### 14.5 验收（M5）
 
 - Staging：手动执行脚本一次，Node 返回 200，报告入库（或 dry-run 日志）。  
-- 微信：测试号或沙箱收到至少一条摘要消息（或记录发送 API 成功响应 id）。
+- Telegram：测试用户 `chat_id` 收到至少一条日报摘要（或记录 Bot API `message_id`）。若同时上微信，再测模板消息一条。
 
 ---
 
