@@ -1,0 +1,14 @@
+{
+  "name": "mcp-doctor-agent-bridge",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "description": "MCP bridge exposing doctor-agent health context tools for Hermes Agent",
+  "main": "src/index.js",
+  "scripts": {
+    "start": "node src/index.js"
+  },
+  "dependencies": {
+    "@modelcontextprotocol/sdk": "latest"
+  }
+}

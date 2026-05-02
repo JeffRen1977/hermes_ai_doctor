@@ -1,25 +1,27 @@
-# Hermes 智能医生代理 — 详细实现文档
+# Hermes 智能医生代理 — 详细实现文档（基于开源 Hermes Agent）
 
-**版本：** 1.2  
-**关联设计：** `hermes_design_document.md`（§1.2、§5、§9 随时问答与每日报告推微信）  
-**遗留后端：** `ai-doctor-agent_legacy/backend`  
+**版本：** 2.0  
+**关联设计：** `hermes_design_document.md`  
+**遗留后端：** `ai-doctor-agent_legacy/backend`（路径以本仓库为准；该目录可能被根 `.gitignore` 忽略，变更需在对应仓库提交）  
 **最后更新：** 2026-05-01  
 
-本文档面向**实施工程师**：按里程碑给出目录结构、接口契约、Node 侧改动清单、环境变量、测试与验收步骤。假定读者已能独立运行 `ai-doctor-agent_legacy` 后端（含 Firebase/环境变量等既有依赖）。
+本文档面向**实施工程师**：基于 **[NousResearch/hermes-agent](https://github.com/NousResearch/hermes-agent)** 的安装与配置，说明如何与 `ai-doctor-agent_legacy` 对接（MCP / 内网 HTTP / Cron / 微信），**不包含**本仓库已移除的自定义 `hermes-agent/` FastAPI 服务。
+
+**必读上游文档：** [hermes-agent.nousresearch.com/docs](https://hermes-agent.nousresearch.com/docs/)
 
 ---
 
-## 1. 文档作用与阅读顺序
+## 1. 阅读顺序
 
 | 顺序 | 章节 | 内容 |
 |------|------|------|
-| 1 | §2 前置条件 | 技能、硬件、与现有仓库的边界 |
-| 2 | §3 总体实施顺序 | M1→M6 依赖关系 |
-| 3 | §4–§6 | Hermes LLM、Hermes Agent（Python）落地 |
-| 4 | §7–§8 | Node：`hermesService`、`aiServiceFactory`、用户设置 |
-| 5 | §9–§11 | PHP 扩展、`hermesAgentService`、领域服务挂钩 |
-| 6 | §12–§14 | **每日报告推微信（12.2）**、微信入站（12.4）、安全与观测 |
-| 7 | §15–§16 | 测试、验收、排错 |
+| 1 | §2 | 前置条件与边界 |
+| 2 | §3 | 安装 Hermes Agent |
+| 3 | §4–§5 | 模型、网关、安全基线 |
+| 4 | §6 | 与 doctor-agent 对接（MCP 优先） |
+| 5 | §7–§8 | PHP 注入、微信选项 |
+| 6 | §9 | Cron 日报与 Node 回调 |
+| 7 | §10 | 测试与验收 |
 
 ---
 
@@ -27,518 +29,248 @@
 
 ### 2.1 技能与工具
 
-- Docker / Docker Compose；内网服务发现与健康检查。
-- Python 3.11+（FastAPI、httpx、Pydantic v2）；可选 LangGraph。
-- Node.js（与 `ai-doctor-agent_legacy/backend/package.json` 一致）；Express、Joi、现有测试框架（Jest）。
-- 至少一种 LLM 运行时：**Ollama**（开发）或 **vLLM**（生产 OpenAI 兼容 `/v1/chat/completions`）。
+- 能运行上游安装脚本的环境（Linux / macOS / WSL2；**原生 Windows 不支持**，用 WSL2）。参考：[Quickstart](https://hermes-agent.nousresearch.com/docs/getting-started/quickstart)。
+- Node.js 与现有 `ai-doctor-agent_legacy/backend` 运行方式不变。
+- 内网连通：Agent 所在主机可访问 **doctor-agent** 的 MCP 或 HTTPS（防火墙白名单）。
 
-### 2.2 硬件参考
+### 2.2 代码边界
 
-| 环境 | 建议 | 说明 |
-|------|------|------|
-| 本地开发 | Apple Silicon / CPU + Ollama，Hermes-3 8B Q4 | 延迟可放宽 |
-| 小规模生产 | 单卡 24GB GPU + vLLM，8B bf16 或量化 | 与设计文档 P95 目标对齐 |
+- **本仓库 `hermes/` 根目录**：仅存**设计与集成说明**；**不**再包含 `hermes-agent/` Python 微服务或根级 `docker-compose.yml` 编排该微服务。
+- **doctor-agent**：增量添加 **MCP Server** 或 **内部路由**（如 `/internal/mcp/*` 仅绑定 localhost + 服务 token）；避免破坏现有对外 REST 契约。
 
-### 2.3 代码边界
+### 2.3 产品强制需求（与设计 §1.2 一致）
 
-- **不改**现有对外 REST 契约（除非单独评审新增 `/internal/*` 或微信回调路由）。
-- **增量**：新文件 + 工厂注册 + 可选 feature flag；默认关闭 Hermes 时行为与当前一致。
-
-### 2.4 产品强制需求（与设计文档 §1.2、§9 一致）
-
-1. **微信随时问答**：用户在微信中**随时**发起多轮消息（以医疗与健康为核心，弱相关生活问题见设计 §9.3）；Node 微信回调将 **OpenID → userId** 后，走与 `routes/chat.js` 等价的链路（落库用户消息 → 组装上下文 → `healthChat` → 客服消息等回写）。
-2. **必须基于个人信息推理**：每次调用 LLM 前**必须**执行 `contextBuilderService.buildAIContext(sanitizedUserId, { medications: true, chatRecent: true, vitalsRecent: true, language })`（具体布尔开关可按数据可用性微调，但**不得**在「零个人上下文」下输出个体化医学建议）。`formatContextForSystemPrompt` 的结果作为 `context` 传入 `hermesService.healthChat` → Hermes `/v1/chat`。
-3. **每日个人报告推微信**：定时任务（如每日 07:00）为开启开关的用户组装**全量维度**上下文，调用 `hermesAgentService` → `/v1/report/daily`，持久化后向用户微信发模板/订阅消息（摘要 + 可选链接）；详见 §12.2、§12.5。
-4. **失败降级**：若 `buildAIContext` 抛错或仅返回空档案，**不**调用 Hermes 编造用户情况；返回固定中文提示（如请完善档案或稍后重试），并打日志（不含 PHI）。
-5. **Hermes Agent**：生产环境建议 `REQUIRE_NON_EMPTY_CONTEXT=true`：`context` 与可选 `payload` 均为空时直接 `400`，防止误配置导致「泛泛回答」上线。
+1. 每次健康相关推理前执行 `buildAIContext(sanitizedUserId, { medications: true, chatRecent: true, vitalsRecent: true, language })`（布尔可按数据可用性微调）。  
+2. 将 `formatContextForSystemPrompt` 结果或结构化 JSON 注入 Agent（工具返回、context file、或会话 system 片段）。  
+3. 失败时**不**调用模型编造用户情况；返回固定中文提示并打非 PHI 日志。
 
 ---
 
-## 3. 总体实施顺序（里程碑依赖）
+## 3. 安装 Nous Hermes Agent
 
-```
-M1 Hermes Agent 骨架 + LLM 运行时（可独立 curl 通）
-        ↓
-M2 hermesService.js + aiServiceFactory + checkAvailableServices + 用户可选 provider=hermes
-        ↓
-M3 contextBuilderService 扩展 PHP + Hermes /v1/analyze/* 与 Pydantic 对齐
-        ↓
-M4 hermesAgentService.js + USE_HERMES_AGENT + 先接 rehabilitationAssistantService
-        ↓
-M5 Node internal/context/*（可选）+ Hermes 缓存失效 webhook（可选）
-        ↓
-M6 /v1/report/* + cron + 微信模板消息 + Prometheus/Grafana + 熔断
-```
-
----
-
-## 4. Hermes LLM 运行时实现要点
-
-### 4.1 Ollama（推荐用于 M1）
-
-1. 使用官方镜像或本机安装 Ollama。
-2. 拉取 Nous Hermes 系列中与你硬件匹配的 tag（以 Ollama Library 为准，例如 `hermes-3` 等；名称随社区更新，**以实际 `ollama list` 为准**）。
-3. 确认 OpenAI 兼容地址：通常为 `http://<host>:11434/v1`，与 OpenAI SDK 的 `base_url` 一致。
-
-### 4.2 vLLM（生产）
-
-1. 使用 `vllm/vllm-openai` 或团队镜像；挂载模型权重路径。
-2. 默认 OpenAI 兼容端口常为 `8000`；在 Hermes Agent 的 `HERMES_LLM_BASE_URL` 指向 `http://hermes-llm:8000/v1`（注意是否带 `/v1` 与客户端拼接方式一致）。
-
-### 4.3 验证命令（与 Agent 解耦）
-
-在 Hermes Agent 未就绪前，可直接对 LLM 网关发 `curl`：
+### 3.1 官方一键安装
 
 ```bash
-curl -s "${HERMES_LLM_BASE_URL}/chat/completions" \
-  -H "Content-Type: application/json" \
-  -d '{"model":"'"${HERMES_MODEL}"'","messages":[{"role":"user","content":"ping"}],"max_tokens":16}'
+curl -fsSL https://raw.githubusercontent.com/NousResearch/hermes-agent/main/scripts/install.sh | bash
 ```
 
-（若使用 Ollama OpenAI 兼容层，路径以官方文档为准。）
+安装后重载 shell，验证：
 
----
-
-## 5. Hermes Agent（Python / FastAPI）实现结构
-
-### 5.1 建议仓库位置
-
-在 Hermes 仓库根目录创建 **`hermes-agent/`**（与设计文档一致），与 `ai-doctor-agent_legacy` 并列，便于根目录单一 `docker-compose.yml` 编排。
-
-### 5.2 最小 `pyproject.toml` 依赖（示例）
-
-- `fastapi`, `uvicorn[standard]`
-- `httpx`
-- `pydantic-settings`
-- `openai`（官方 SDK，仅作兼容客户端指向自托管 base_url）
-
-可选：`langgraph`, `prometheus-client`, `structlog`。
-
-### 5.3 `app/config.py`（环境变量）
-
-| 变量 | 必填 | 说明 |
-|------|------|------|
-| `HERMES_LLM_BASE_URL` | 是 | 如 `http://hermes-llm:11434/v1` |
-| `HERMES_MODEL` | 是 | 与运行时模型名一致 |
-| `INTERNAL_TOKEN` | 是 | 与 Node 的 `HERMES_AGENT_TOKEN` 一致 |
-| `DOCTOR_AGENT_BASE_URL` | 否 | M5 Pull 模式再启用 |
-| `DEBUG_PROMPTS` | 否 | `1` 时允许打全量 prompt（仅开发） |
-
-### 5.4 全局中间件：鉴权
-
-对所有 `/v1/*`（除 `/v1/health` 外按策略决定）校验：
-
-```http
-X-Internal-Token: <与 Node 约定的一致密钥>
+```bash
+hermes doctor
 ```
 
-未匹配返回 `401`，body JSON `{ "detail": "unauthorized" }`。
+### 3.2 贡献者/源码路径（可选）
 
-### 5.5 `GET /v1/health`
-
-- 不调用 LLM；返回 `200` + `{ "status": "ok" }`。
-- 供 Compose `healthcheck` 与 Node `isServiceAvailable` 探测。
-
-### 5.6 `GET /v1/ready`
-
-- 可选：对 LLM 发极小 `max_tokens` 请求或 TCP 探测；失败返回 `503`。
-- 避免每次轻量 health 都打满推理。
-
-### 5.7 `POST /v1/chat`（M1 核心）
-
-**请求体（JSON）**
-
-| 字段 | 类型 | 必填 | 说明 |
-|------|------|------|------|
-| `userId` | string | 建议 | 日志关联；禁止在 info 级日志打印 PHI |
-| `message` | string | 是 | 用户本轮问题 |
-| `language` | `"zh"` \| `"en"` | 否 | 默认 `zh` |
-| `context` | string | 否（生产视为是） | **必须由 Node 注入**：`formatContextForSystemPrompt` 输出；置于 system 或等价高优先级；见 §2.4。若开启 `REQUIRE_NON_EMPTY_CONTEXT`，空字符串拒绝请求 |
-| `payload` | object | 否 | 可选：结构化 PHP（M3），便于引用与引用校验 |
-| `options` | object | 否 | `model`, `temperature`, `maxTokens`, `stream` |
-| `traceId` | string | 否 | 透传 OpenTelemetry / 日志 |
-
-**非流式响应（与 Node 适配器对齐）**
-
-遗留代码中 `healthChat` 消费字段主要为 **`aiResult.message`**（见 `routes/chat.js`、`rehabilitationAssistantService.js`；部分路径使用 `aiResult.message ?? aiResult.text ?? aiResult.analysis`）。
-
-Hermes Agent 建议统一返回：
-
-```json
-{
-  "success": true,
-  "message": "……模型回复正文……",
-  "model": "hermes-3-8b",
-  "processingTimeMs": 842,
-  "traceId": "uuid",
-  "citations": []
-}
+```bash
+git clone https://github.com/NousResearch/hermes-agent.git
+cd hermes-agent
+./setup-hermes.sh
 ```
 
-失败：
+详见上游 [Contributing](https://hermes-agent.nousresearch.com/docs/developer-guide/contributing)。
 
-```json
-{ "success": false, "error": "readable message", "code": "optional" }
+### 3.3 首次配置向导
+
+```bash
+hermes setup
 ```
 
-**流式（SSE，可选 M2+）**
-
-- `text/event-stream`；首条可发 `event: meta`，`data: {"model":"..."}`。
-- 末条或独立 `event: done` 携带 `citations`、`usedContext`。
-- Node 侧 `chat.js` 当前为**非流式** JSON；若要保持不改路由，流式可作为后续优化，适配器先实现 `stream: false`。
-
-### 5.8 其它 `/v1/*` 端点（按设计文档分期实现）
-
-实现顺序建议：
-
-1. M3：`POST /v1/analyze/records`、`/diet`、`/symptoms`、`/drug-interactions`（请求体携带 `healthData` 或与现有 adapter 一致的字段映射）。
-2. M4：`POST /v1/coach/rehab`、`/plan/intervention`、`/monitor/risk`、`/twin/update`（输入输出用 Pydantic 模型 + JSON Schema 导出供 Node 校验）。
-3. M6：`POST /v1/report/daily`、`/v1/report/weekly`。
-
-每个端点在实现文档中应维护**与 `aiServiceFactory` 方法**的映射表（见 §13）。
+按需完成 **模型供应商**、**工具**、**网关**（若使用 Telegram 等）配置。环境变量全集见上游 [Environment Variables](https://hermes-agent.nousresearch.com/docs/reference/environment-variables)。
 
 ---
 
-## 6. Docker Compose（根目录）实施说明
+## 4. 模型与推理端点
 
-### 6.1 服务列表
+使用 TUI：
 
-| 服务名 | 说明 |
-|--------|------|
-| `hermes-llm` | Ollama 或 vLLM；不对外网暴露推理端口（仅内网） |
-| `hermes-agent` | 本仓库构建的 FastAPI 镜像 |
-| `doctor-agent` | 可选：引用现有 legacy 的 Dockerfile；或本地 `npm run dev` 仅连 Agent |
-
-### 6.2 网络
-
-- 自定义 bridge：`hermes_net`。
-- `hermes-llm`、`hermes-agent`、Node 应用在同一网络，通过服务名 DNS 互访。
-
-### 6.3 密钥
-
-- 使用 `.env` 或 Docker secrets 注入 `INTERNAL_TOKEN` / `HERMES_AGENT_TOKEN`，**勿**提交到 Git。
-
----
-
-## 7. Node：`hermesService.js` 实现细则
-
-### 7.1 文件路径
-
-`ai-doctor-agent_legacy/backend/src/services/adapters/hermesService.js`
-
-### 7.2 可用性：`isServiceAvailable()`
-
-推荐逻辑：
-
-1. 若未设置 `process.env.HERMES_AGENT_URL`，返回 `false`。
-2. 对 `${HERMES_AGENT_URL}/v1/health` 发 `GET`，超时 2s；`200` 则 `true`。
-3. 结果**缓存 30s**（内存模块级变量），避免每次请求都打 Agent。
-
-### 7.3 `getAvailableModels()`
-
-返回与设计一致的模型列表，例如：
-
-```js
-{ text: [process.env.HERMES_DEFAULT_MODEL || 'hermes-3-8b'], all: [...] }
+```bash
+hermes model
 ```
 
-### 7.4 HTTP 客户端
+在自动化环境可结合上游配置文档设置 API Key 与默认模型。自托管 OpenAI 兼容网关（vLLM/Ollama）按上游说明填入 base URL。
 
-- 使用 `axios` 或 `fetch`（Node 18+）；统一 `timeout`（如 chat 60s，analyze 120s）。
-- 统一设置 header：`X-Internal-Token: process.env.HERMES_AGENT_TOKEN`。
+---
 
-### 7.5 `healthChat(message, context, options)`
+## 5. Messaging Gateway（可选第一步）
 
-1. `POST ${HERMES_AGENT_URL}/v1/chat`，body 含 `message`, `context`, `language: options.language`, `options.model` 等。
-2. 将 Agent 返回映射为：
+若先用 **Telegram** 验证全链路，再扩展到微信：
 
-```js
-return { success: true, message: data.message, model: data.model, provider: 'hermes' };
+```bash
+hermes gateway setup
+hermes gateway start
 ```
 
-3. 若 Agent 返回 `success: false`，原样 `{ success: false, error: data.error }`。
-
-**注意：** `openaiService.healthChat` 成功时字段名为 `message`；`hermesService` 必须与之一致，否则 `chat.js` 中 `aiResult.message` 为 `undefined`。
-
-### 7.6 `analyzeHealthRecords(healthData, options)`
-
-- 将现有 `healthData`（含 `documents` 数组等）序列化为 Agent 期望的 body。
-- Agent 返回的文本分析放入 `analysis` 键，以匹配 `reportService`、`digitalTwinService` 等。
-
-### 7.7 PDF / 图像类方法
-
-设计原则：**解析与 OCR 仍在 Node / 现有 Gemini 路径完成也可**；M2 可让 Hermes 仅承接「纯文本已抽出后的 `analyzeHealthRecords`」。
-
-若要在 Hermes 上实现 `analyzePDFDocument` / `extractTextFromImage`：
-
-- 要么 Agent 内嵌多模态（依赖 Hermes 权重是否多模态与运行时支持）；
-- 要么先调用云适配器抽文本，再送 Hermes 分析（混合 pipeline，需在代码注释中写清）。
-
-**最小策略（推荐）：** `hermesService.analyzePDFDocument` 返回 `{ success: false, error: 'Use gemini for PDF extraction in v1' }`，或在 factory 层对 hermes 自动 fallback（增加复杂度，需单独评审）。
-
-### 7.8 可选方法
-
-与 `aiServiceFactory` 一致实现：`analyzeDiet`、`analyzeSymptoms`、`checkDrugInteractions`、`analyzeImageWithAI`（能力取决于 Agent 是否实现对应路由）。
+完整说明：[Messaging Gateway](https://hermes-agent.nousresearch.com/docs/user-guide/messaging)。
 
 ---
 
-## 8. 修改 `aiServiceFactory.js`
+## 6. 与 doctor-agent 对接：推荐 MCP（含可运行示例）
 
-### 8.1 注册适配器
+本仓库已提供示例目录：`mcp-doctor-agent-bridge/`。它不是新 AI 服务，而是一个 **MCP 工具桥**，直接复用 doctor-agent 现有：
 
-```js
-const hermesService = require('./adapters/hermesService');
-// ...
-this.adapters = {
-  gemini: geminiService,
-  openai: openaiService,
-  ernie: ernieService,
-  qwen: qwenService,
-  hermes: hermesService
-};
-```
+- `buildAIContext`
+- `formatContextForSystemPrompt`
 
-### 8.2 `checkAvailableServices()` 增加 hermes 分支
+这样 Hermes Agent 在回答前可调用工具拿到用户个体上下文，不需要维护一套重复的 `/v1/chat` 微服务协议。
 
-仿照 Gemini：若 `hermesService.isServiceAvailable()` 为 true，则 `available.hermes = { name: 'Hermes (自托管)', models: [...], provider: 'hermes' }`。
+### 6.1 目录与核心文件
 
-### 8.3 `DEFAULT_MODEL_BY_PROVIDER`（可选）
-
-在 `ai-doctor-agent_legacy/backend/src/config/aiProviderConfig.js` 中增加：
-
-```js
-hermes: process.env.HERMES_DEFAULT_MODEL || 'hermes-3-8b'
-```
-
-便于 `getDefaultModel('hermes')` 有返回值。
-
-### 8.4 用户设置 UI / API
-
-- `userSettingsService` 已支持 `aiProvider` 字符串；前端或管理接口需允许选择 `hermes`（若当前 Joi 校验限制 provider 列表，需**扩展白名单**）。
-- `routes/chat.js` 已从 `getUserAISettings` 读取 `userProvider` 并传入 `healthChat`，**无需改调用方式**，只要 factory 识别 `hermes` 即可。
-
----
-
-## 9. PHP / `AIContextPayload` 扩展（M3）
-
-### 9.1 Node：`models/aiContextPayload.js`
-
-1. 用 Joi 增加可选字段，例如：
-
-   - `wearableSnapshot`（object，含日期范围、摘要字符串）
-   - `dietRecent`（string 或结构化子 schema）
-   - `exerciseRecent`（string 或 object）
-   - `riskFlags`（array of `{ code, severity, summary }`）
-
-2. 保持 `stripUnknown: true` 以便旧客户端兼容。
-
-### 9.2 Node：`contextBuilderService.js`
-
-1. 新增并行查询：`userWearablesRepo`、`vitalsDailyRepo`（多日窗口）、`nutritionAnalysisRepo`、`exercisePlanRepo`、`riskAlertRepo` 等（按产品优先级取舍）。
-2. 在 `formatContextForSystemPrompt` 中为每块增加与现有风格一致的中文标题（如 `[可穿戴摘要]`）。
-
-### 9.3 Hermes Agent：`app/context/schemas.py`
-
-- 用 Pydantic 定义与 Joi **字段语义一致**的模型；接收 Node 发来的 JSON `payload`（整包 PHP），避免重复实现拉数逻辑（Push 模式）。
-
----
-
-## 10. `hermesAgentService.js`（M4）
-
-### 10.1 文件路径
-
-`ai-doctor-agent_legacy/backend/src/services/hermesAgentService.js`
-
-### 10.2 职责
-
-封装对 Hermes Agent **高阶端点**的 HTTP 调用，返回**已解析的 JSON** 或抛出可捕获错误；**不**经过 `aiServiceFactory.getService`，避免与单轮 adapter 混淆。
-
-### 10.3 建议导出方法
-
-| 方法 | HTTP | 调用方（示例） |
-|------|------|----------------|
-| `planIntervention(userId, body)` | `POST /v1/plan/intervention` | `interventionEngineService` |
-| `coachRehab(userId, body)` | `POST /v1/coach/rehab` | `rehabilitationAssistantService` |
-| `monitorRisk(userId, body)` | `POST /v1/monitor/risk` | `riskMonitoringService` |
-| `updateTwin(userId, body)` | `POST /v1/twin/update` | `digitalTwinService` |
-
-### 10.4 Feature flag
-
-```js
-const useHermesAgent = process.env.USE_HERMES_AGENT === 'true';
-```
-
-在每个领域服务**函数开头**：若 `useHermesAgent` 且 `hermesService.isServiceAvailable()`，走 `hermesAgentService`；否则保持现有 `aiServiceFactory.*` 路径。
-
-### 10.5 首推改造点：`rehabilitationAssistantService.explainClinicalMetrics`
-
-- 将 `buildMetricsExplanationPrompt` 的输出作为 Agent body 的 `instruction` 或 `messages` 之一；`metrics` 原样 JSON 传入。
-- 成功后仍写入 `rehabilitationRecordRepo`，`aiProvider` 记为 `hermes`，`aiModel` 取响应中的 model。
-
----
-
-## 11. `riskMonitoringService` 与 Hermes（设计级挂钩）
-
-现有服务已包含规则阈值、采样点数（`MAX_DATA_POINTS_FOR_PROMPT`）、节流（`AUTO_DETECT_THROTTLE_MS`）等。集成时建议：
-
-1. **仅在**规则引擎或初筛已标记「需叙事」或置信度边界案例时调用 Hermes `/v1/monitor/risk`，控制成本。
-2. 请求体包含：时间范围、`dataPoints` 摘要（非全量原始点若可）、用户用药与基础病来自 PHP。
-3. 将 Hermes 返回的 `severity`、`rationale` 映射写入 `riskAlertRepo` 的扩展字段或 `analysis` 子文档（需与现有 schema 对齐，必要时 migration 在 Firebase 层由团队流程处理）。
-
----
-
-## 12. 定时报告与主动推送（M6）
-
-### 12.1 Cron 位置
-
-任选其一：
-
-- Node 进程内 `node-cron`（简单）；
-- 系统 crud + `curl` 调内部脚本；
-- 独立 worker 容器调用 Node 的**内部**路由（需鉴权）。
-
-### 12.2 每日报告生成与推微信（核心流程）
-
-1. **Cron**（如 `0 7 * * *` 北京时间，可配置 `DAILY_REPORT_CRON`）触发 `dailyReportJob`（新建模块，例如 `jobs/dailyWechatReport.js`）。
-2. **用户筛选**：已绑定微信 OpenID、且 `userSettings` 中 **`dailyWechatReport: true`**（或等价字段，默认 true 需在 PR 中说明）的用户列表；注意分页与并发上限。
-3. **上下文（须不少于聊天核心维度）**：对每个用户 `buildAIContext` 打开 M3 后全部扩展位，或实现 `buildDailyReportContext(userId)` 显式拉取：基础档案、用药、多日 `vitalsDaily`、可穿戴聚合摘要、`riskAlertRepo` 未关闭条目、`chatSessionRepo` 昨日摘要（可选）等。
-4. **调用 Hermes**：`POST /v1/report/daily`，body 含 `userId`、`language`、`period`、`payload`（PHP JSON）、`traceId`。
-5. **持久化**：`reportService` 或直连 `reportRepo` 保存，`reportType: 'daily-wechat'`（与设计文档一致），`sections` 与 Hermes 返回对齐。
-6. **推送微信**：取该用户 `wechatBinding.openId` → 调模板/订阅消息 API，**keyword 数据**填日报标题 + 1～2 句摘要；若需全文，第二条发短链或拆条（遵守微信长度与频次）。
-7. **失败**：Hermes 失败写 `notificationRepo` 或日志告警，**不**静默跳过；可对单用户重试 1 次。
-
-### 12.3 微信模板消息（概要）
-
-1. 在 Node 增加配置：`WECHAT_APP_ID`、`WECHAT_APP_SECRET`、模板 ID 等。
-2. 实现 `access_token` 内存缓存与过期刷新。
-3. 报告完成后异步发模板消息；失败重试队列（可选 Redis / 云任务）。
-
-具体加解密、域名备案、类目资质按微信官方文档执行，**不在此重复**。
-
-### 12.4 微信入站：对话式询问与个人上下文（实施清单）
-
-与 `hermes_design_document.md` §9 对齐，建议新增路由模块（示例：`routes/wechat.js` + `services/wechatInboundService.js`），职责如下。
-
-| 步骤 | 实现要点 |
-|------|----------|
-| 1. 验签 | 按微信公众平台文档校验 `signature`、`timestamp`、`nonce`；加密模式则解密消息体。 |
-| 2. 解析消息 | `text` 取 `Content`；`image` 可先下载媒体再转已有图像分析流程，**分析前仍须**绑定 userId 并带 PHP。 |
-| 3. 身份 | 从消息中的 `FromUserName`（OpenID）查映射表得到内部 `userEmail` / `userId`；未绑定则回复引导关注/OAuth 绑定链接，**不调 LLM**。 |
-| 4. 个人上下文 | `sanitizeUserId` 后与 `chat.js` 一致：`buildAIContext(..., { medications: true, chatRecent: true, vitalsRecent: true, language: 'zh' })` → `formatContextForSystemPrompt`。 |
-| 5. 推理 | `aiServiceFactory.healthChat(text, chatContext, { provider, model, language })`；`provider` 来自用户设置或环境默认 `hermes`。 |
-| 6. 出站 | 将 `aiResult.message` 截断为微信允许长度，必要时拆多条 **客服消息**（注意 48 小时窗口与频次限制）。 |
-| 7. 会话续写 | 用户消息与助手回复写入 `chatSessionRepo`（或与微信 `session` 对齐的键），保证下一轮 `chatRecent` 可用。 |
-
-**集成测试建议**：Mock 微信 XML/JSON 请求体，固定 OpenID 映射到测试用户，断言发往 Hermes Agent 的 HTTP body 中 `context` 字段非空且包含 `[基础档案]` 等格式塔片段（与 `formatContextForSystemPrompt` 一致）。
-
-### 12.5 用户设置与数据模型（建议）
-
-- 在 `userSettingsRepo` 增加字段：`notifications.dailyWechatReport`（boolean）、可选 `notifications.dailyReportHour`（0–23）。
-- 新增 **`wechatUserBinding`**（集合或表）：`openId`、`unionId`、`userId`、`boundAt`，供 12.4 入站与 12.2 日报推送共用。
-
----
-
-## 13. 端点 ↔ `aiServiceFactory` 方法 ↔ 领域服务 映射
-
-| Hermes Agent 端点 | Factory 方法 | 主要调用文件（遗留） |
-|-------------------|--------------|----------------------|
-| `/v1/chat` | `healthChat` | `routes/chat.js`, `rehabilitationAssistantService.js`, `interventionEngineService.js` |
-| `/v1/analyze/records` | `analyzeHealthRecords` | `healthAnalysisService.js`, `digitalTwinService.js`, `riskMonitoringService.js`, `reportService.js` |
-| `/v1/analyze/diet` | `analyzeDiet` | `healthAnalysisService.js`（若存在） |
-| `/v1/analyze/symptoms` | `analyzeSymptoms` | `interventionEngineService.js` |
-| `/v1/analyze/drug-interactions` | `checkDrugInteractions` | `interventionEngineService.js` |
-| `/v1/coach/rehab` | （不经 factory，经 `hermesAgentService`） | `rehabilitationAssistantService.js` |
-| `/v1/plan/intervention` | `hermesAgentService` | `interventionEngineService.js` |
-| `/v1/monitor/risk` | `hermesAgentService` | `riskMonitoringService.js` |
-| `/v1/twin/update` | `hermesAgentService` | `digitalTwinService.js` |
-| `/v1/report/*` | `hermesAgentService` 或 `analyzeHealthRecords` | `reportService.js` |
-
----
-
-## 14. 安全与合规实现清单
-
-| 项 | 实现要点 |
-|----|----------|
-| 服务间认证 | 仅内网 + `X-Internal-Token`；生产轮换密钥 |
-| 日志 | 默认不记录 `context` / `payload` 全文；仅长度、userId hash、traceId |
-| 急诊话术 | Agent system prompt 要求遇急症提示就医；Node 侧保留 `emergencyService` 触发条件 |
-| 出站流量 | Hermes Agent 默认禁止任意公网回调；工具仅限内网白名单 |
-| RAG（若做） | 按 userId 命名空间隔离；删除用户时同步删索引 |
-| 个人化强制 | 微信与 API 聊天共用「先 buildAIContext 再 healthChat」；代码审查禁止绕过 |
-
----
-
-## 15. 测试计划
-
-### 15.1 单元测试
-
-- `hermesService.js`：mock `axios`，断言 URL、header、`message` 映射。
-- `aiServiceFactory.test.js`：增加 `hermes` adapter 存在性用例（与现有 gemini mock 模式一致）。
-
-### 15.2 集成测试（需运行 Agent + LLM）
-
-1. Compose 启动 `hermes-llm` + `hermes-agent`。
-2. Node 设置 `HERMES_AGENT_URL`、`HERMES_AGENT_TOKEN`。
-3. 调用 `POST /api/chat/send`（或等价路由），用户设置 `aiProvider: hermes`，断言 200 与非空 `message`。
-4. **个人上下文**：对 Hermes Agent 使用 mock 时，断言请求体中 `context` 长度大于阈值（例如 ≥ 50）且含 `基础档案` 或英文等价片段；`buildAIContext` 失败时应 **不** 出现正常 `message` 体（应为错误提示）。
-
-### 15.3 微信入站（可选）
-
-在 12.4 路由就绪后，用沙箱或 fixture 模拟一条文本消息，断言全链路调用一次 `healthChat` 且 `context` 非空。
-
-### 15.4 回归
-
-- `provider: gemini`（或当前默认）路径与改造前完全一致。
-
----
-
-## 16. 验收检查表（对齐设计文档 §13）
-
-- [ ] Compose 健康检查：`hermes-llm`、`hermes-agent` 均为 healthy。
-- [ ] `POST /v1/chat` 最小请求成功，`message` 非空。
-- [ ] Node 用户 `aiProvider=hermes` 时聊天成功。
-- [ ] `USE_HERMES_AGENT=true` 时康复指标解读走 Agent 且落库字段正确。
-- [ ] 关闭 Hermes URL 或 token 错误时，服务降级或清晰错误，不崩溃。
-- [ ] 生产日志级别下无完整 PHI。
-- [ ] **个人化**：`healthChat` 调用前始终执行 `buildAIContext`；故意使上下文失败时不返回虚构个体化建议。
-- [ ] **微信**（若已实施 12.4）：文本消息经 OpenID 映射后走上述同一链路，且助手回复写回 `chatSessionRepo`（或等价存储）。
-- [ ] **每日日报**：Cron 触发后，对测试用户生成 `daily-wechat` 报告记录并成功调用一次微信发送接口（或 mock）。
-
----
-
-## 17. 故障排查
-
-| 现象 | 排查 |
+| 文件 | 作用 |
 |------|------|
-| `hermes` 不在 available 列表 | `HERMES_AGENT_URL`、防火墙、Agent `/v1/health` |
-| chat 返回空 | Agent 返回字段是否为 `message`；Node 映射错误 |
-| 超时 | 增大 timeout；检查 GPU OOM；减少 `maxTokens` |
-| 中文质量差 | 换更大模型或临时 fallback `gemini`；检查 `language` 是否传入 |
+| `mcp-doctor-agent-bridge/src/index.js` | MCP Server 入口（stdio transport） |
+| `mcp-doctor-agent-bridge/src/doctorContextTools.js` | 封装 `health_context_get`、`health_context_prompt` |
+| `mcp-doctor-agent-bridge/.env.example` | 路径、白名单、上下文截断配置 |
+| `mcp-doctor-agent-bridge/README.md` | 快速启动与 Hermes 注册示例 |
+
+### 6.2 运行步骤（本地）
+
+1. 安装依赖：
+
+```bash
+cd mcp-doctor-agent-bridge
+npm install
+```
+
+2. 复制并修改环境变量（至少改 `LEGACY_BACKEND_ROOT`）：
+
+```bash
+cp .env.example .env
+```
+
+3. 启动：
+
+```bash
+npm start
+```
+
+> 该服务是 stdio MCP，正常情况下由 Hermes 进程托管拉起，不需要对外端口。
+
+### 6.3 MCP tools 设计（已实现）
+
+#### Tool A: `health_context_get`
+
+- **输入**：`{ userId, options }`
+- **内部逻辑**：
+  1) 校验 `userId`（可选白名单 `MCP_ALLOWED_USER_IDS`）  
+  2) 调 `buildAIContext(userId, options)`  
+  3) 调 `formatContextForSystemPrompt(payload, { maxChars })`
+- **输出**：`{ userId, payload, systemPromptContext }`
+
+#### Tool B: `health_context_prompt`
+
+- **输入**：`{ userId, options }`
+- **输出**：`{ userId, systemPromptContext }`
+- **用途**：只需要拼 system prompt 时，减少 token 与工具返回体积。
+
+### 6.4 Hermes Agent 侧接入方式
+
+通过上游 MCP 配置把该 server 注册为本地 command（示例见 `mcp-doctor-agent-bridge/README.md`）。核心是：
+
+- command: `node`
+- args: `mcp-doctor-agent-bridge/src/index.js`
+- env: 注入 `LEGACY_BACKEND_ROOT` 等变量
+
+然后在 Persona / 指令中明确约束：
+
+- 回答健康问题前，先调用 `health_context_get` 或 `health_context_prompt`
+- 若工具失败，返回“无法加载您的健康档案，请稍后重试”，而不是直接给个体化结论
+
+### 6.5 安全要求（MCP 版本）
+
+- **本机优先**：先用 `stdio + 本机`，避免暴露网络接口。  
+- **最小权限**：`MCP_ALLOWED_USER_IDS` 在测试阶段强制白名单。  
+- **审计日志**：记录 `traceId/userId/toolName`，不记录完整 PHI 文本。  
+- **失败降级**：工具报错时禁止生成个体化医学建议。
+
+### 6.6 备选：内网 HTTPS（与 MCP 并存）
+
+若团队需给 cron 或其他后端复用，可在 Node 增加 `POST /internal/agent/context`（返回 `{ payload, systemPrompt }`）。建议：
+
+- 对话链路优先 MCP（更贴近 Agent tooling）
+- 批处理链路可用 HTTPS（更易与现有 job 系统集成）
 
 ---
 
-## 18. 附录：环境变量汇总
+## 7. PHP 注入到会话
 
-### Node（`ai-doctor-agent_legacy/backend`）
+任选一种或组合：
 
-| 变量 | 说明 |
-|------|------|
-| `HERMES_AGENT_URL` | 如 `http://127.0.0.1:8100` 或 `http://hermes-agent:8100` |
-| `HERMES_AGENT_TOKEN` | 与 Agent `INTERNAL_TOKEN` 一致 |
-| `HERMES_DEFAULT_MODEL` | 可选；默认模型名 |
-| `USE_HERMES_AGENT` | `true` / `false` |
-| `DAILY_REPORT_CRON` | 可选；默认 `0 7 * * *` |
-| `WECHAT_DAILY_TEMPLATE_ID` | 日报模板 ID（与公众平台配置一致） |
-
-### Hermes Agent
-
-| 变量 | 说明 |
-|------|------|
-| `HERMES_LLM_BASE_URL` | OpenAI 兼容 API 根 |
-| `HERMES_MODEL` | 模型 id |
-| `INTERNAL_TOKEN` | 与 Node 一致 |
-| `REQUIRE_NON_EMPTY_CONTEXT` | 可选 `true`：`/v1/chat` 在 `context` 与 `payload` 皆空时返回 `400` |
+1. **工具调用**：模型在回答前拉取 `health_context.get`。在 Persona 或 AGENTS.md 中要求：回答健康问题时**必须先**拉取上下文工具。  
+2. **Context Files**：对长期稳定偏好使用上游 [Context Files](https://hermes-agent.nousresearch.com/docs/user-guide/features/context-files)；**每日变化的体征**仍应以工具为准。  
+3. **预处理 Webhook**：微信 → Node 已在 §8 组装好 user message + system 前缀，再转发到 Agent（取决于所选微信方案）。
 
 ---
 
-*实施过程中若与设计文档冲突，以本实现文档的「接口契约 + 遗留代码实际字段」为准，并回写修订到 `hermes_design_document.md`。*
+## 8. 微信实现路径
+
+### 8.1 HermesClaw（社区）
+
+参考：[HermesClaw](https://github.com/AaronWong1999/hermesclaw) 与上游 README「Community」一节。部署前评估账号与合规风险。
+
+### 8.2 官方回调 + Node 中介
+
+1. 微信公众平台配置服务器 URL → Node。  
+2. Node：`OpenID` → `userId`，`buildAIContext`，拼用户消息。  
+3. 将消息送入 Agent：若 Agent 与 Node 同机，可用 **本地 HTTP** 或上游支持的 **API**（以当时版本为准）；否则用 **消息队列** 解耦。  
+4. 将 Agent 回复拆条调用**客服消息接口**返回用户。
+
+**注意：** 具体「Node → Hermes」的 HTTP API 以上游版本为准；本指南不绑定已删除的 `/v1/chat` 自定义契约。
+
+---
+
+## 9. Cron：每日报告
+
+1. 使用上游 [Cron](https://hermes-agent.nousresearch.com/docs/user-guide/features/cron) 定义自然语言或脚本任务，触发频率如 `0 7 * * *`（时区按服务器）。  
+2. 任务体内：调用 MCP `health_context.get`（全量 options）或 Node `POST /internal/agent/daily-report-input`。  
+3. 将生成正文 `POST` 到 Node 的 `reportService` 等价路由（需自行封装认证）。  
+4. Node：`reportRepo` 持久化后调用**微信模板/订阅消息**。
+
+若希望**完全在 Node 内**跑 cron，可不用 Hermes Cron，仅用 **node-cron + 云厂商或自托管 LLM**；与「采用 Hermes Agent」不冲突——Agent 负责对话与个人助理，日报可由 Node 调度。
+
+---
+
+## 10. 测试与验收
+
+### 10.1 上游自检
+
+```bash
+hermes doctor
+```
+
+### 10.2 集成测试建议
+
+- **MCP**：Mock `buildAIContext`，断言工具返回包含 `medications` / `vitalsRecent` 字段。  
+- **E2E（staging）**：测试用户发 Telegram 消息，日志中 `traceId` 与 `userId` 关联，且无完整 PHI 明文落盘。
+
+### 10.3 doctor-agent 现有单测
+
+继续运行 `ai-doctor-agent_legacy/backend` 内 Jest；`contextBuilderService` 等与 Hermes 解耦，应在不启动 Agent 时全部通过。
+
+---
+
+## 11. 排错清单
+
+| 现象 | 检查 |
+|------|------|
+| gateway 无响应 | `hermes gateway` 日志、Token、防火墙 |
+| MCP 连不上 | Node MCP 监听地址、Bearer、TLS |
+| 上下文为空 | `buildAIContext` 选项、Firebase 规则、userId 映射 |
+| 微信收不到 | access_token 刷新、模板字段、用户是否订阅 |
+
+---
+
+## 12. 参考链接汇总
+
+| 主题 | URL |
+|------|-----|
+| 仓库 | https://github.com/NousResearch/hermes-agent |
+| 文档首页 | https://hermes-agent.nousresearch.com/docs/ |
+| MCP | https://hermes-agent.nousresearch.com/docs/user-guide/features/mcp |
+| Cron | https://hermes-agent.nousresearch.com/docs/user-guide/features/cron |
+| Security | https://hermes-agent.nousresearch.com/docs/user-guide/security |
+| HermesClaw | https://github.com/AaronWong1999/hermesclaw |
+
+---
+
+*版本 2.0 删除所有针对自建 `hermes-agent/` FastAPI、`hermesService.js`、`HERMES_AGENT_URL` 微服务契约的里程碑描述；集成以开源 Hermes Agent + doctor-agent 增量为主。*
