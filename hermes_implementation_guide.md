@@ -20,9 +20,10 @@
 | 3 | §4–§5 | 模型、网关、安全基线 |
 | 4 | §6 | 与 doctor-agent 对接（MCP 优先） |
 | 5 | §13 | M4：Skills 草案与 Joi 对齐 |
-| 6 | §7–§8 | PHP 注入、微信选项 |
-| 7 | §9 | Cron 日报与 Node 回调 |
-| 8 | §10 | 测试与验收 |
+| 6 | §14 | M5：Cron + Node webhook（日报 / 微信） |
+| 7 | §7–§8 | PHP 注入、微信选项 |
+| 8 | §9 | Cron 日报与 Node 回调（摘要） |
+| 9 | §10 | 测试与验收 |
 
 ---
 
@@ -228,7 +229,7 @@ npm start
 
 任选一种或组合：
 
-1. **工具调用**：模型在回答前拉取 `health_context.get`。在 Persona 或 AGENTS.md 中要求：回答健康问题时**必须先**拉取上下文工具。  
+1. **工具调用**：模型在回答前拉取 `health_chat_guard` / `health_context_get`。在 Persona 或 AGENTS.md 中要求：回答健康问题时**必须先**拉取上下文工具。  
 2. **Context Files**：对长期稳定偏好使用上游 [Context Files](https://hermes-agent.nousresearch.com/docs/user-guide/features/context-files)；**每日变化的体征**仍应以工具为准。  
 3. **预处理 Webhook**：微信 → Node 已在 §8 组装好 user message + system 前缀，再转发到 Agent（取决于所选微信方案）。
 
@@ -251,12 +252,13 @@ npm start
 
 ---
 
-## 9. Cron：每日报告
+## 9. Cron：每日报告（设计摘要）
 
-1. 使用上游 [Cron](https://hermes-agent.nousresearch.com/docs/user-guide/features/cron) 定义自然语言或脚本任务，触发频率如 `0 7 * * *`（时区按服务器）。  
-2. 任务体内：调用 MCP `health_chat_guard` / `health_context_get`（全量 options）或 Node `POST /internal/agent/daily-report-input`。  
-3. 将生成正文 `POST` 到 Node 的 `reportService` 等价路由（需自行封装认证）。  
-4. Node：`reportRepo` 持久化后调用**微信模板/订阅消息**。
+1. 使用上游 [Cron](https://hermes-agent.nousresearch.com/docs/user-guide/features/cron) 或 **Node 自带调度** 触发每日任务。  
+2. **个体化数据**仍由 Node：`buildAIContext` / `reportService`；Hermes 侧可选只负责叙事草稿（经 MCP）或完全不参与。  
+3. **微信送达**必须在 Node 完成（模板/订阅消息、`access_token`）。  
+
+**M5 落地文件（本仓库）：** 见 §14。
 
 若希望**完全在 Node 内**跑 cron，可不用 Hermes Cron，仅用 **node-cron + 云厂商或自托管 LLM**；与「采用 Hermes Agent」不冲突——Agent 负责对话与个人助理，日报可由 Node 调度。
 
@@ -318,6 +320,38 @@ hermes doctor
 **Joi 对齐要点：** `sections` 的键名与 `ai-doctor-agent_legacy/backend/src/models/reportModels.js` 中 `reportSchema` 一致（`executiveSummary`、`healthMetrics`、`riskAssessment`、`recommendations`、`actionItems`、`charts`、`attachments`）。持久化前 **Node 仍须** `reportSchema.validate`。
 
 **上游文档：** [Skills](https://hermes-agent.nousresearch.com/docs/user-guide/features/skills)
+
+---
+
+## 14. M5：Cron + Node webhook（日报 → 微信）
+
+### 14.1 目标
+
+- **定时**：每天固定时刻触发（如 `0 7 * * *`）。  
+- **生成与持久化**：在 **doctor-agent** 内调用 `reportService` / `reportRepo`（与现有 Joi 一致）。  
+- **微信**：Node 调用公众平台接口发模板/订阅消息；**不要**假设 Hermes 能直接代发微信模板消息。
+
+### 14.2 推荐集成：Hermes Cron → `curl` → Node
+
+1. 在 doctor-agent 增加内网路由，例如 `POST /internal/cron/daily-report`，校验 `Authorization: Bearer <token>` 或 mTLS。  
+2. 路由内：遍历订阅用户 → `buildAIContext`（options 全开）→ 调 LLM 或使用 MCP（若你从 Node 进程调本地工具）→ 写 `reportRepo` → 调微信发送。  
+3. 本仓库提供示例脚本：`mcp-doctor-agent-bridge/scripts/trigger-node-daily-report.sh`  
+   环境变量：`DOCTOR_AGENT_DAILY_WEBHOOK_URL`、`DOCTOR_AGENT_DAILY_WEBHOOK_TOKEN`（见 `mcp-doctor-agent-bridge/.env.example`）。  
+4. Hermes Cron 配置：按上游文档让任务**执行该脚本**；详细叙述见 `mcp-doctor-agent-bridge/hermes/M5_cron_and_node_webhook.md`。
+
+### 14.3 备选：仅 Node cron
+
+云 Scheduler / `node-cron` 直接 `POST` 同一 webhook，**不依赖** Hermes 进程；Hermes 只做对话与 MCP。
+
+### 14.4 与 MCP 的关系
+
+- 日报可在 **Node 内**直接调用 `report_generate` 等价逻辑（已是现有 service）。  
+- 若希望由 Hermes 生成章节草稿，再由 Node 校验入库，可在 Node 路由内调用 MCP 工具（需自行封装进程间调用）；本仓库不强制该路径。
+
+### 14.5 验收（M5）
+
+- Staging：手动执行脚本一次，Node 返回 200，报告入库（或 dry-run 日志）。  
+- 微信：测试号或沙箱收到至少一条摘要消息（或记录发送 API 成功响应 id）。
 
 ---
 
