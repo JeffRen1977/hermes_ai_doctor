@@ -118,6 +118,32 @@ server.setRequestHandler(ListToolsRequestSchema, async () => ({
       }
     },
     {
+      name: "health_chat_guard_for_telegram",
+      description:
+        "Same guardrail as health_chat_guard, but resolves userId from Telegram chat id (integrations.telegramChatId) via doctor-agent repositories. Use when the client only knows telegramChatId.",
+      inputSchema: {
+        type: "object",
+        properties: {
+          telegramChatId: {
+            type: ["string", "number"],
+            description: "Telegram message.chat.id after user bound in App."
+          },
+          options: {
+            type: "object",
+            properties: {
+              medications: { type: "boolean" },
+              vitalsRecent: { type: "boolean" },
+              chatRecent: { type: "boolean" },
+              language: { type: "string", enum: ["zh", "en"] }
+            },
+            additionalProperties: false
+          }
+        },
+        required: ["telegramChatId"],
+        additionalProperties: false
+      }
+    },
+    {
       name: "health_analyze_text",
       description:
         "Analyze health-related text content using doctor-agent AI service factory.",
@@ -224,6 +250,12 @@ server.setRequestHandler(CallToolRequestSchema, async (request) => {
     }
     if (name === "health_chat_guard") {
       const result = await tools.healthChatGuard(args);
+      return {
+        content: [{ type: "text", text: JSON.stringify(result, null, 2) }]
+      };
+    }
+    if (name === "health_chat_guard_for_telegram") {
+      const result = await tools.healthChatGuardForTelegram(args);
       return {
         content: [{ type: "text", text: JSON.stringify(result, null, 2) }]
       };

@@ -37,6 +37,10 @@ npm start
   - 入参：`{ userId, options }`
   - 出参：`{ canAnswerHealthQuestion, fallbackMessage, contextResult? }`
   - 用途：M3 强制个体化守卫；上下文加载失败时统一降级文案
+- `health_chat_guard_for_telegram`
+  - 入参：`{ telegramChatId, options }`（`chat_id` 与绑定 webhook 写入的 `integrations.telegramChatId` 一致）
+  - 出参：与 `health_chat_guard` 相同，并附带 `resolvedUserId`、`telegramChatId`；未绑定时 `canAnswerHealthQuestion=false`、`reason=telegram_not_linked`
+  - 用途：Hermes Telegram 多用户（方案 B）；依赖 legacy 中 `findUserIdByTelegramChatId` 与绑定流程
 - `health_analyze_text`
   - 入参：`{ userId, text, options }`
   - 出参：`aiServiceFactory.analyzeHealthRecords` 结果
@@ -82,7 +86,7 @@ npm start
 
 ## 6) 建议调用顺序（对话场景）
 
-1. 先调 `health_chat_guard`（M3 守卫）
+1. 先调 `health_chat_guard`（已知 `userId`）或 `health_chat_guard_for_telegram`（仅知 Telegram `chat_id` 时，方案 B）
 2. 若 `canAnswerHealthQuestion=false`，直接返回 `fallbackMessage`
 3. 若 `canAnswerHealthQuestion=true`，再生成健康回答
 4. 需要深分析时调 `health_analyze_text`

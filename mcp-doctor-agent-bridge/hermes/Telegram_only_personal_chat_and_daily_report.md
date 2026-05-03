@@ -33,12 +33,10 @@ Hermes **不会**自动知道「这条 Telegram 消息 = 哪个 doctor-agent 用
 需要 **「Telegram `chat_id` → `userId`」** 的绑定表（存在 doctor-agent 即可），典型流程：
 
 1. 用户在 **doctor-agent App** 里点「绑定 Telegram」，生成一次性短码。  
-2. 用户在 Telegram 里把短码发给机器人；**Node webhook** 收到消息后写入 `userSettings.integrations.telegramChatId`，并关联 `userId`。  
-3. Hermes 侧若仍只做对话：要么  
-   - **再加一个 MCP 工具**（如 `health_chat_guard_for_telegram`），入参只有 `telegramChatId`，由 Node 反查 `userId` 再 `buildAIContext`（需在 legacy 里实现反查，本仓库未内置）；要么  
-   - **Telegram 先打到 Node**，Node 调 `buildAIContext` + LLM，再 `sendMessage`（此时 Hermes 只做「非医疗」或停用，医疗全在 Node）。
+2. 用户在 Telegram 里把短码发给机器人；**Node webhook** `POST /internal/telegram/webhook` 写入 `userSettings.integrations.telegramChatId`（见 legacy：`telegramIntegrationService`、`internalTelegram`）。可选请求头 **`X-Telegram-Bot-Api-Secret-Token`** ↔ **`TELEGRAM_WEBHOOK_SECRET`**。  
+3. Hermes 侧只做对话时：使用 MCP 工具 **`health_chat_guard_for_telegram`**，入参 **`telegramChatId`**；bridge 内调用 legacy **`userSettingsRepo.findUserIdByTelegramChatId`** 再复用与 `health_chat_guard` 相同的守卫逻辑。若配置了 **`MCP_ALLOWED_USER_IDS`**，解析出的 **`userId` 仍须在白名单内**。备选：**Telegram 先打到 Node**，Node 调 `buildAIContext` + LLM，再 `sendMessage`（Hermes 不参与医疗）。
 
-> 结论：**仅 Hermes + 现 MCP 工具**，多用户时要补 **「chat_id → userId」** 的一层；单人可先用方案 A。
+> 结论：多用户时 **「chat_id → userId」** 由 App 短码绑定 + `integrations.telegramChatId` + MCP 反查完成；单人可继续用方案 A。
 
 ---
 
@@ -60,14 +58,14 @@ Hermes **不会**自动知道「这条 Telegram 消息 = 哪个 doctor-agent 用
 | 位置 | 变量 / 配置 |
 |------|-------------|
 | Hermes | MCP server `doctor-context`；模型 provider；Telegram gateway |
-| MCP bridge | `LEGACY_BACKEND_ROOT`、`MCP_ALLOWED_USER_IDS`（生产务必限制） |
-| doctor-agent | `INTERNAL_CRON_BEARER_TOKEN`、`CRON_DAILY_REPORT_USER_EMAILS` 或请求体 `userEmails`、`TELEGRAM_BOT_TOKEN`、用户 `integrations.telegramChatId` |
+| MCP bridge | `LEGACY_BACKEND_ROOT`、`MCP_ALLOWED_USER_IDS`（生产务必限制；方案 B 下须包含各用户 sanitize 后的 `userId`） |
+| doctor-agent | `INTERNAL_CRON_BEARER_TOKEN`、`CRON_DAILY_REPORT_USER_EMAILS` 或请求体 `userEmails`、`TELEGRAM_BOT_TOKEN`、用户 `integrations.telegramChatId`；方案 B 另需 **`TELEGRAM_WEBHOOK_SECRET`**（与 `setWebhook` 的 `secret_token` 一致）、已登录用户调 **`POST /api/integrations/telegram/bind-code`**、Webhook **`POST /internal/telegram/webhook`** |
 
 ---
 
 ## 五、验收自测
 
-- [ ] Telegram 发一句健康问，日志或工具链中能看出 **调用了 `health_chat_guard`** 且 `userId` 正确。  
+- [ ] Telegram 发一句健康问，日志或工具链中能看出 **调用了 `health_chat_guard` 或 `health_chat_guard_for_telegram`** 且上下文与用户一致。  
 - [ ] 故意改错 `userId` / 关 MCP，应 **降级**而非个体化胡编。  
 - [ ] 手动 `curl` 一次 `daily-report`（或 dryRun），Telegram 能收到摘要或 dry-run 日志正确。
 

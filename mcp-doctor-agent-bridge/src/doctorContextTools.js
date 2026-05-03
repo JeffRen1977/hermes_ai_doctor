@@ -41,6 +41,11 @@ function loadLegacyService(legacyBackendRoot, fileName) {
   return require(servicePath);
 }
 
+function loadRepositories(legacyBackendRoot) {
+  const repoPath = path.join(legacyBackendRoot, "src", "repositories", "index.js");
+  return require(repoPath);
+}
+
 function createContextTools(config) {
   const contextBuilder = loadContextBuilder(config.legacyBackendRoot);
   const aiServiceFactory = loadLegacyService(
@@ -60,6 +65,45 @@ function createContextTools(config) {
   const fallbackMessage =
     config.healthFallbackMessage ||
     "抱歉，我暂时无法加载您的个人健康档案。请稍后重试，或先完善基础档案后再咨询。";
+  const legacyBackendRoot = config.legacyBackendRoot;
+
+  async function runHealthChatGuard(userId, options) {
+    ensureUserAllowed(userId, allowedUsers);
+
+    try {
+      const payload = await contextBuilder.buildAIContext(userId, options);
+      const systemPromptContext = contextBuilder.formatContextForSystemPrompt(payload, {
+        maxChars
+      });
+      const hasUsableContext =
+        Boolean(systemPromptContext && systemPromptContext.trim()) &&
+        payload.basicInfo !== "暂无基础档案信息。";
+
+      if (!hasUsableContext) {
+        return {
+          canAnswerHealthQuestion: false,
+          fallbackMessage,
+          reason: "empty_or_placeholder_context"
+        };
+      }
+
+      return {
+        canAnswerHealthQuestion: true,
+        fallbackMessage,
+        contextResult: {
+          userId,
+          payload,
+          systemPromptContext
+        }
+      };
+    } catch (error) {
+      return {
+        canAnswerHealthQuestion: false,
+        fallbackMessage,
+        reason: `context_load_failed: ${error.message}`
+      };
+    }
+  }
 
   async function healthContextGet(args = {}) {
     const userId = args.userId;
@@ -97,41 +141,30 @@ function createContextTools(config) {
   async function healthChatGuard(args = {}) {
     const userId = args.userId;
     const options = args.options || {};
-    ensureUserAllowed(userId, allowedUsers);
+    return runHealthChatGuard(userId, options);
+  }
 
-    try {
-      const payload = await contextBuilder.buildAIContext(userId, options);
-      const systemPromptContext = contextBuilder.formatContextForSystemPrompt(payload, {
-        maxChars
-      });
-      const hasUsableContext =
-        Boolean(systemPromptContext && systemPromptContext.trim()) &&
-        payload.basicInfo !== "暂无基础档案信息。";
+  async function healthChatGuardForTelegram(args = {}) {
+    const chatId = args.telegramChatId;
+    if (chatId == null || chatId === "") {
+      throw new Error("telegramChatId is required");
+    }
 
-      if (!hasUsableContext) {
-        return {
-          canAnswerHealthQuestion: false,
-          fallbackMessage,
-          reason: "empty_or_placeholder_context"
-        };
-      }
+    const { userSettingsRepo } = loadRepositories(legacyBackendRoot);
+    const userId = await userSettingsRepo.findUserIdByTelegramChatId(chatId);
 
-      return {
-        canAnswerHealthQuestion: true,
-        fallbackMessage,
-        contextResult: {
-          userId,
-          payload,
-          systemPromptContext
-        }
-      };
-    } catch (error) {
+    if (!userId) {
       return {
         canAnswerHealthQuestion: false,
-        fallbackMessage,
-        reason: `context_load_failed: ${error.message}`
+        fallbackMessage:
+          "未找到与该 Telegram 账号绑定的用户。请先在 App 内获取绑定码，并在 Telegram 中完成绑定。",
+        reason: "telegram_not_linked"
       };
     }
+
+    const options = args.options || {};
+    const result = await runHealthChatGuard(userId, options);
+    return { ...result, resolvedUserId: userId, telegramChatId: String(chatId) };
   }
 
   async function healthAnalyzeText(args = {}) {
@@ -186,6 +219,7 @@ function createContextTools(config) {
     healthContextGet,
     healthContextPrompt,
     healthChatGuard,
+    healthChatGuardForTelegram,
     healthAnalyzeText,
     riskDetectAnomalies,
     reportGenerate
