@@ -9,6 +9,7 @@
     "start": "node src/index.js"
   },
   "dependencies": {
-    "@modelcontextprotocol/sdk": "latest"
+    "@modelcontextprotocol/sdk": "latest",
+    "dotenv": "^16.6.1"
   }
 }

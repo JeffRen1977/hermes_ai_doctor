@@ -13,7 +13,8 @@ npm install
 
 复制 `.env.example` 并按机器路径修改：
 
-- `LEGACY_BACKEND_ROOT`：`ai-doctor-agent_legacy/backend` 的绝对路径
+- `LEGACY_BACKEND_ROOT`：`ai-doctor-agent_legacy/backend` 的绝对路径  
+- 同一目录下的 **`backend/.env`** 会在 MCP 启动时自动加载（需含 Firebase 的 `FIREBASE_API_KEY` 等，与本地跑 doctor-agent 一致）；`mcp-doctor-agent-bridge/.env` 可覆盖其中变量。
 - `MCP_ALLOWED_USER_IDS`：可选，逗号分隔白名单 userId
 - `MCP_MAX_CONTEXT_CHARS`：`formatContextForSystemPrompt` 截断长度
 

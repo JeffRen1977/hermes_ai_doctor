@@ -1,5 +1,6 @@
 import path from "node:path";
 import { fileURLToPath } from "node:url";
+import dotenv from "dotenv";
 import { Server } from "@modelcontextprotocol/sdk/server/index.js";
 import { StdioServerTransport } from "@modelcontextprotocol/sdk/server/stdio.js";
 import {
@@ -12,10 +13,16 @@ const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
 const projectRoot = path.resolve(__dirname, "..");
 
+const legacyBackendRoot =
+  process.env.LEGACY_BACKEND_ROOT ||
+  path.resolve(projectRoot, "..", "ai-doctor-agent_legacy", "backend");
+
+// Load doctor-agent backend/.env so Firebase (FIREBASE_API_KEY, etc.) is set when Hermes or `npm start` runs from this repo.
+dotenv.config({ path: path.join(legacyBackendRoot, ".env") });
+dotenv.config({ path: path.join(projectRoot, ".env") });
+
 const config = {
-  legacyBackendRoot:
-    process.env.LEGACY_BACKEND_ROOT ||
-    path.resolve(projectRoot, "..", "ai-doctor-agent_legacy", "backend"),
+  legacyBackendRoot,
   allowedUserIds: process.env.MCP_ALLOWED_USER_IDS || "",
   maxContextChars: process.env.MCP_MAX_CONTEXT_CHARS || "8000",
   healthFallbackMessage:
