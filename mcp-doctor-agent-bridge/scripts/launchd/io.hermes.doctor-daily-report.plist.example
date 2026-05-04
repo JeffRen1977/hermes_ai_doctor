@@ -1,0 +1,35 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0">
+<dict>
+  <key>Label</key>
+  <string>io.hermes.doctor-daily-report</string>
+  <key>RunAtLoad</key>
+  <false/>
+  <key>StartCalendarInterval</key>
+  <dict>
+    <key>Hour</key>
+    <integer>7</integer>
+    <key>Minute</key>
+    <integer>0</integer>
+  </dict>
+  <key>StandardOutPath</key>
+  <string>/Users/CHANGE_ME/.hermes/logs/daily-report-launchd.out.log</string>
+  <key>StandardErrorPath</key>
+  <string>/Users/CHANGE_ME/.hermes/logs/daily-report-launchd.err.log</string>
+  <key>EnvironmentVariables</key>
+  <dict>
+    <key>DOCTOR_AGENT_DAILY_WEBHOOK_URL</key>
+    <string>https://YOUR-RAILWAY-HOST/internal/cron/daily-report</string>
+    <key>DOCTOR_AGENT_DAILY_WEBHOOK_TOKEN</key>
+    <string>REPLACE_WITH_INTERNAL_CRON_BEARER_TOKEN</string>
+    <key>DOCTOR_AGENT_DAILY_USER_EMAILS</key>
+    <string>jianfengren.sd@gmail.com</string>
+  </dict>
+  <key>ProgramArguments</key>
+  <array>
+    <string>/bin/bash</string>
+    <string>/Users/CHANGE_ME/Documents/hermes/mcp-doctor-agent-bridge/scripts/trigger-node-daily-report.sh</string>
+  </array>
+</dict>
+</plist>

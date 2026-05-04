@@ -110,11 +110,15 @@ npm start
 
 见 `hermes/skills/`（`daily-health-report`、`lab-result-extraction`），与 `reportModels.js` 的 `sections` Joi 形状对齐。
 
-## 10) M5 Cron → Node 回调（示例）
+## 10) M5 Cron → Node 回调（日报 → Telegram）
 
-- 说明：`hermes/M5_cron_and_node_webhook.md`（**日报推送默认写 Telegram**；微信为可选）
-- 脚本：`scripts/trigger-node-daily-report.sh`（叫醒 **`POST /internal/cron/daily-report`**；doctor-agent 侧已实现）
-- 脚本说明：`scripts/README.md`
+- **一步步清单：** `hermes/DAILY_REPORT_RUNBOOK.md`
+- 架构说明：`hermes/M5_cron_and_node_webhook.md`
+- 触发脚本：`scripts/trigger-node-daily-report.sh`（`DOCTOR_AGENT_DAILY_DRY_RUN`、`DOCTOR_AGENT_DAILY_USER_EMAILS` 等）
+- launchd 示例：`scripts/launchd/io.hermes.doctor-daily-report.plist.example`
+- Hermes 内置 Cron（经 Agent + terminal 跑脚本）：`hermes/HERMES_CRON_DAILY_REPORT.md`、`scripts/register-hermes-cron-daily-report.sh`
+- 后端环境变量示例：`hermes/doctor-agent-backend.env.example`（复制到 `ai-doctor-agent_legacy/backend/.env`）
+- 脚本索引：`scripts/README.md`
 
 ## 11) M6 观测 / 熔断 / MCP 审计
 

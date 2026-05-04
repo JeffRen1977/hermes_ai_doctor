@@ -1,12 +1,12 @@
-# M5 scripts — Cron → Node webhook (examples)
+# M5 scripts — Cron → Node webhook
 
-These scripts are **integration stubs**. Wire `DOCTOR_AGENT_DAILY_WEBHOOK_URL` to a route you implement on `ai-doctor-agent_legacy` (e.g. `POST /internal/cron/daily-report`) that:
+`ai-doctor-agent_legacy` 已实现 **`POST /internal/cron/daily-report`**（Bearer）。本目录脚本用于从 **crontab / launchd / 云 Scheduler** 唤醒该接口。
 
-1. Authenticates the caller (`Authorization: Bearer …` or mTLS).
-2. For each subscribed user: `buildAIContext` → LLM or Hermes MCP → `reportRepo` → **Telegram** (`sendMessage` with stored `chat_id`) or other channel you implement.
+**实操清单与排错：** `../hermes/DAILY_REPORT_RUNBOOK.md`  
+**macOS 定时示例：** `launchd/io.hermes.doctor-daily-report.plist.example`（复制到 `~/Library/LaunchAgents/` 后编辑路径与密钥）
 
-Do **not** expose this URL on the public internet without auth.
+不要在公网暴露该 URL 且**不配** Bearer。
 
 | Script | Purpose |
 |--------|---------|
-| `trigger-node-daily-report.sh` | `curl` POST from Hermes cron or system crontab |
+| `trigger-node-daily-report.sh` | `curl` POST；支持 `DOCTOR_AGENT_DAILY_DRY_RUN`、`DOCTOR_AGENT_DAILY_USER_EMAILS`（见脚本内注释） |

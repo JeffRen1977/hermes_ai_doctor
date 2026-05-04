@@ -1,5 +1,7 @@
 # M5 — Hermes Cron + Node webhook（日报 → **Telegram**）
 
+**实操清单（环境变量、dry run、launchd / crontab）：** 见同目录 **`DAILY_REPORT_RUNBOOK.md`**。
+
 设计目标：**定时触发**在 **Node（doctor-agent）** 内完成「取数 → 生成 → 入库 → **Telegram 推送摘要/链接**」；Hermes Cron 只负责**可靠唤醒**与可选的自然语言提醒。
 
 > 若日后改为微信模板消息，只需把 Node 内「发送」实现从 **Telegram Bot API** 换成 **微信公众平台接口**；webhook 与 Cron 触发方式不变。
