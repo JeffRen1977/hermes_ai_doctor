@@ -246,7 +246,7 @@ See: `hermes/DAILY_REPORT_RUNBOOK.md`
 
 1. Open terminal  
 2. Run `hermes chat` (or your installed command)  
-3. Ask: *“根据我的个人健康档案，简单介绍我的基本信息。”*  
+3. Ask: *“Based on my personal health profile, briefly summarize my basic information.”*  
 4. **Point out:** Agent should call `mcp_doctor_context_health_chat_guard` first  
 5. Show answer cites profile fields from backend  
 
@@ -430,7 +430,7 @@ Logs: `~/.hermes/logs/gateway.log`, `~/.hermes/logs/mcp-stderr.log`
 | MCP tool details | `../README.md`, `../hermes/M3_tool_call_strategy.md` |
 | Telegram binding | `../hermes/Telegram_only_personal_chat_and_daily_report.md` |
 | Daily report setup | `../hermes/DAILY_REPORT_RUNBOOK.md` |
-| Design rationale (Chinese) | `../../hermes_design_document.md` |
+| Design rationale | `../../hermes_design_document.md` |
 
 ---
 

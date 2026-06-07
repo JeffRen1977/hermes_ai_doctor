@@ -1,106 +1,106 @@
-# M6 — 观测（Observability）、熔断（Circuit breaker）、MCP 审计
+# M6 — Observability, circuit breaker, MCP audit
 
-本页为**检查清单与实施要点**，对齐 `hermes_design_document.md` **M6** 与 **§8 安全**。Hermes 与 doctor-agent 两侧都要覆盖。
-
----
-
-## 1. 观测（Observability）
-
-### 1.1 Hermes Agent（上游）
-
-| 检查项 | 说明 |
-|--------|------|
-| 日志落盘与轮转 | 网关 / CLI / Cron 日志路径、大小上限、`logrotate` 或等价 |
-| 结构化字段 | `trace_id` / `session_id` / `tool_name` / `provider` / `model`（不落 PHI 全文） |
-| 健康检查 | `hermes doctor`；进程监控（systemd / Docker healthcheck） |
-| 上游文档 | [Security](https://hermes-agent.nousresearch.com/docs/user-guide/security) |
-
-### 1.2 doctor-agent（Node）
-
-| 检查项 | 说明 |
-|--------|------|
-| HTTP 访问日志 | 对 `/internal/cron/*` 记录 **caller IP、route、status、duration**，不记录 Bearer |
-| 业务指标 | 日报任务：`processed` / `skipped` / `errors`；MCP 若经 Node 代理则记 **tool 调用次数与延迟** |
-| 错误追踪 | Sentry / OpenTelemetry 等（可选）；**采样**避免 PHI 进入事件 |
-
-### 1.3 MCP Bridge（`mcp-doctor-agent-bridge`）
-
-| 检查项 | 说明 |
-|--------|------|
-| stderr 日志 | stdio MCP 的日志应走 stderr，避免污染 MCP JSON-RPC stdout |
-| 工具维度 | 每条工具调用打：`tool`、`userId` 长度或 hash、**成功/失败**、耗时（**禁止**完整 `systemPromptContext` 默认落日志） |
+This page is a **checklist and implementation notes** aligned with `hermes_design_document.md` **M6** and **§8 Security**. Cover both Hermes and doctor-agent sides.
 
 ---
 
-## 2. 熔断与降级（Circuit breaker & fallback）
+## 1. Observability
 
-### 2.1 LLM 提供商
+### 1.1 Hermes Agent (upstream)
 
-| 检查项 | 说明 |
-|--------|------|
-| 主备模型 | Hermes `hermes model` 配置备用；Gemini/OpenRouter 429/5xx 时切换 |
-| 超时 | doctor-agent `analyzeHealthRecords` 等已有超时策略的，保持与 M6 一致 |
-| 降级文案 | MCP / `health_chat_guard` 失败时 **禁止**个体化结论（沿用 M3） |
+| Check | Notes |
+|-------|-------|
+| Log rotation | Gateway / CLI / Cron log paths, size limits, `logrotate` or equivalent |
+| Structured fields | `trace_id` / `session_id` / `tool_name` / `provider` / `model` (no full PHI) |
+| Health checks | `hermes doctor`; process monitoring (systemd / Docker healthcheck) |
+| Upstream docs | [Security](https://hermes-agent.nousresearch.com/docs/user-guide/security) |
 
-### 2.2 MCP / 内部 Cron
+### 1.2 doctor-agent (Node)
 
-| 检查项 | 说明 |
-|--------|------|
-| MCP 进程 | 工具连续失败 N 次 → 短暂熔断（进程内计数 + 冷却），避免拖垮 doctor-agent DB |
-| Cron webhook | `POST /internal/cron/daily-report` 返回 5xx 时，调度器应 **指数退避** 重试；避免无限重试刷 LLM |
-| 限流 | 对 cron IP / token 做 **QPS 上限**（如每实例每分钟 1 次全量任务） |
+| Check | Notes |
+|-------|-------|
+| HTTP access logs | For `/internal/cron/*` log **caller IP, route, status, duration** — not Bearer token |
+| Business metrics | Daily job: `processed` / `skipped` / `errors`; if MCP proxied through Node, log **tool call count and latency** |
+| Error tracking | Sentry / OpenTelemetry (optional); **sample** to avoid PHI in events |
+
+### 1.3 MCP Bridge (`mcp-doctor-agent-bridge`)
+
+| Check | Notes |
+|-------|-------|
+| stderr logging | stdio MCP logs must go to stderr, not MCP JSON-RPC stdout |
+| Per-tool metrics | Each call: `tool`, userId length or hash, **success/fail**, duration (**do not** log full `systemPromptContext` by default) |
+
+---
+
+## 2. Circuit breaker and fallback
+
+### 2.1 LLM providers
+
+| Check | Notes |
+|-------|-------|
+| Primary/backup models | Hermes `hermes model` fallback; switch on Gemini/OpenRouter 429/5xx |
+| Timeouts | Keep doctor-agent `analyzeHealthRecords` timeouts aligned with M6 |
+| Degraded copy | On MCP / `health_chat_guard` failure **forbid** individualized conclusions (M3) |
+
+### 2.2 MCP / internal Cron
+
+| Check | Notes |
+|-------|-------|
+| MCP process | After N consecutive failures → short circuit (in-process counter + cooldown) to protect doctor-agent DB |
+| Cron webhook | On `POST /internal/cron/daily-report` 5xx, scheduler should **exponential backoff**; avoid infinite LLM retries |
+| Rate limits | Cap cron IP/token QPS (e.g. one full batch per instance per minute) |
 
 ### 2.3 Telegram
 
-| 检查项 | 说明 |
-|--------|------|
-| Bot API 429 | 遵守 `retry_after`；批量用户时间隔发送 |
-| 失败队列 | 可选：失败消息入队重试，避免静默丢日报 |
+| Check | Notes |
+|-------|-------|
+| Bot API 429 | Respect `retry_after`; stagger multi-user sends |
+| Failure queue | Optional: retry failed messages so daily reports are not silently dropped |
 
 ---
 
-## 3. MCP 审计（Audit）
+## 3. MCP audit
 
-### 3.1 工具与数据最小化
+### 3.1 Tool and data minimization
 
-| 检查项 | 说明 |
-|--------|------|
-| 白名单 | 生产启用 `MCP_ALLOWED_USER_IDS`；禁止任意 `userId` 遍历 |
-| 动作工具 | `risk_detect_anomalies`、`report_generate` 仅在 **显式策略** 下开启（Hermes tool policy） |
-| 输出截断 | `MCP_MAX_CONTEXT_CHARS` 生产合理上限（如 8000–12000） |
+| Check | Notes |
+|-------|-------|
+| Allowlist | Production: enable `MCP_ALLOWED_USER_IDS`; block arbitrary userId enumeration |
+| Action tools | Enable `risk_detect_anomalies`, `report_generate` only under **explicit** Hermes tool policy |
+| Output truncation | Reasonable production cap for `MCP_MAX_CONTEXT_CHARS` (e.g. 8000–12000) |
 
-### 3.2 审计记录（建议字段）
+### 3.2 Audit record (recommended fields)
 
-每条 MCP 工具调用（或经 Node 代理时）append-only 记录：
+Append-only per MCP tool call (or when proxied via Node):
 
-- `ts`（ISO）、`tool`、`user_id_hash`、`ok`、`duration_ms`、`error_class`（不含 PHI）
+- `ts` (ISO), `tool`, `user_id_hash`, `ok`, `duration_ms`, `error_class` (no PHI)
 
-存储：专用审计集合 / 表，**TTL** 或定期归档。
+Storage: dedicated audit collection/table with **TTL** or periodic archive.
 
-### 3.3 渗透与权限
+### 3.3 Penetration and access
 
-| 检查项 | 说明 |
-|--------|------|
-| 内网隔离 | `/internal/cron/*` 仅 VPC / mTLS；公网 **禁止** 直连 |
-| Token | `INTERNAL_CRON_BEARER_TOKEN` 定期轮换；泄露即作废 |
-| MCP stdio | 仅本机 Hermes 拉起；**勿**把 MCP 暴露到公网 SSE 除非有 TLS + 强鉴权 |
-
----
-
-## 4. 验收清单（M6 完成定义）
-
-- [ ] Hermes 与 Node 关键路径均有 **非 PHI** 结构化日志或指标  
-- [ ] LLM 失败有 **可观测** 错误率与 **可配置** fallback  
-- [ ] MCP 工具调用有 **审计摘要**（无全量上下文）  
-- [ ] Cron / MCP 有 **限流或熔断**，避免雪崩  
-- [ ] `/internal/cron/*` **不可从公网匿名访问**  
-- [ ] 一次 **staging 渗透或脚本扫描**（含 MCP 与 internal 路由）无高危项，或已记录修复计划  
+| Check | Notes |
+|-------|-------|
+| Network isolation | `/internal/cron/*` VPC / mTLS only; **no** anonymous public access |
+| Token rotation | Rotate `INTERNAL_CRON_BEARER_TOKEN` on leak |
+| MCP stdio | Local Hermes only; do not expose MCP to public SSE without TLS + strong auth |
 
 ---
 
-## 5. 参考链接
+## 4. Acceptance checklist (M6 definition of done)
 
-| 主题 | URL |
-|------|-----|
+- [ ] Hermes and Node critical paths have **non-PHI** structured logs or metrics  
+- [ ] LLM failures have **observable** error rates and **configurable** fallback  
+- [ ] MCP tool calls have **audit summaries** (no full context dumps)  
+- [ ] Cron / MCP have **rate limits or circuit breaking** to prevent cascades  
+- [ ] `/internal/cron/*` **not anonymously reachable from the public internet**  
+- [ ] One **staging penetration or scripted scan** (MCP + internal routes) with no critical findings, or documented remediation plan  
+
+---
+
+## 5. Reference links
+
+| Topic | URL |
+|-------|-----|
 | Hermes Security | https://hermes-agent.nousresearch.com/docs/user-guide/security |
 | Hermes MCP | https://hermes-agent.nousresearch.com/docs/user-guide/features/mcp |

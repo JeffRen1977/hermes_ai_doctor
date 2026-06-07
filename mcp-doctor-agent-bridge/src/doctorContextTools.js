@@ -64,7 +64,7 @@ function createContextTools(config) {
   const maxChars = Number(config.maxContextChars || 8000);
   const fallbackMessage =
     config.healthFallbackMessage ||
-    "抱歉，我暂时无法加载您的个人健康档案。请稍后重试，或先完善基础档案后再咨询。";
+    "Sorry, I cannot load your personal health profile right now. Please try again later or complete your basic profile before asking health questions.";
   const legacyBackendRoot = config.legacyBackendRoot;
 
   async function runHealthChatGuard(userId, options) {
@@ -157,7 +157,7 @@ function createContextTools(config) {
       return {
         canAnswerHealthQuestion: false,
         fallbackMessage:
-          "未找到与该 Telegram 账号绑定的用户。请先在 App 内获取绑定码，并在 Telegram 中完成绑定。",
+          "No user is linked to this Telegram account. Get a bind code in the app and complete binding in Telegram first.",
         reason: "telegram_not_linked"
       };
     }

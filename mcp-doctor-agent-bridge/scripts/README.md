@@ -1,12 +1,12 @@
 # M5 scripts — Cron → Node webhook
 
-`ai-doctor-agent_legacy` 已实现 **`POST /internal/cron/daily-report`**（Bearer）。本目录脚本用于从 **crontab / launchd / 云 Scheduler** 唤醒该接口。
+`ai-doctor-agent_legacy` implements **`POST /internal/cron/daily-report`** (Bearer). Scripts in this directory wake that endpoint from **crontab / launchd / cloud Scheduler**.
 
-**实操清单与排错：** `../hermes/DAILY_REPORT_RUNBOOK.md`  
-**macOS 定时示例：** `launchd/io.hermes.doctor-daily-report.plist.example`（复制到 `~/Library/LaunchAgents/` 后编辑路径与密钥）
+**Runbook and troubleshooting:** `../hermes/DAILY_REPORT_RUNBOOK.md`  
+**macOS schedule example:** `launchd/io.hermes.doctor-daily-report.plist.example` (copy to `~/Library/LaunchAgents/` and edit paths and secrets)
 
-不要在公网暴露该 URL 且**不配** Bearer。
+Do not expose this URL on the public internet without Bearer authentication.
 
 | Script | Purpose |
 |--------|---------|
-| `trigger-node-daily-report.sh` | `curl` POST；支持 `DOCTOR_AGENT_DAILY_DRY_RUN`、`DOCTOR_AGENT_DAILY_USER_EMAILS`（见脚本内注释） |
+| `trigger-node-daily-report.sh` | `curl` POST; supports `DOCTOR_AGENT_DAILY_DRY_RUN`, `DOCTOR_AGENT_DAILY_USER_EMAILS` (see script comments) |

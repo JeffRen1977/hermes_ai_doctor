@@ -27,7 +27,7 @@ const config = {
   maxContextChars: process.env.MCP_MAX_CONTEXT_CHARS || "8000",
   healthFallbackMessage:
     process.env.MCP_HEALTH_FALLBACK_MESSAGE ||
-    "抱歉，我暂时无法加载您的个人健康档案。请稍后重试，或先完善基础档案后再咨询。"
+    "Sorry, I cannot load your personal health profile right now. Please try again later or complete your basic profile before asking health questions."
 };
 
 const tools = createContextTools(config);

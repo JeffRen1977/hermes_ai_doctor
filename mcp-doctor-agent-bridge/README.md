@@ -1,58 +1,58 @@
 # MCP Doctor-Agent Bridge
 
-这个目录是一个最小可运行示例：把 `ai-doctor-agent_legacy/backend` 里的 `contextBuilderService` 通过 MCP tools 暴露给 Hermes Agent。
+This directory is a minimal runnable example: it exposes `contextBuilderService` from `ai-doctor-agent_legacy/backend` to Hermes Agent via MCP tools.
 
-## 1) 安装
+## 1) Install
 
 ```bash
 cd mcp-doctor-agent-bridge
 npm install
 ```
 
-## 2) 环境变量
+## 2) Environment variables
 
-复制 `.env.example` 并按机器路径修改：
+Copy `.env.example` and adjust paths for your machine:
 
-- `LEGACY_BACKEND_ROOT`：`ai-doctor-agent_legacy/backend` 的绝对路径  
-- 同一目录下的 **`backend/.env`** 会在 MCP 启动时自动加载（需含 Firebase 的 `FIREBASE_API_KEY` 等，与本地跑 doctor-agent 一致）；`mcp-doctor-agent-bridge/.env` 可覆盖其中变量。
-- `MCP_ALLOWED_USER_IDS`：可选，逗号分隔白名单 userId
-- `MCP_MAX_CONTEXT_CHARS`：`formatContextForSystemPrompt` 截断长度
+- `LEGACY_BACKEND_ROOT`: absolute path to `ai-doctor-agent_legacy/backend`
+- **`backend/.env`** in that directory is loaded automatically when MCP starts (must include Firebase `FIREBASE_API_KEY`, etc., same as running doctor-agent locally); `mcp-doctor-agent-bridge/.env` can override those variables.
+- `MCP_ALLOWED_USER_IDS`: optional comma-separated allowlist of userId values
+- `MCP_MAX_CONTEXT_CHARS`: truncation length for `formatContextForSystemPrompt`
 
-## 3) 启动 MCP Server
+## 3) Start MCP server
 
 ```bash
 npm start
 ```
 
-该服务使用 **stdio transport**，通常由 Hermes Agent 进程拉起，不需要单独暴露端口。
+This service uses **stdio transport** and is normally started by the Hermes Agent process; it does not need a separate public port.
 
-## 4) 提供的工具
+## 4) Tools provided
 
 - `health_context_get`
-  - 入参：`{ userId, options }`
-  - 出参：`{ userId, payload, systemPromptContext }`
+  - Input: `{ userId, options }`
+  - Output: `{ userId, payload, systemPromptContext }`
 - `health_context_prompt`
-  - 入参：`{ userId, options }`
-  - 出参：`{ userId, systemPromptContext }`
+  - Input: `{ userId, options }`
+  - Output: `{ userId, systemPromptContext }`
 - `health_chat_guard`
-  - 入参：`{ userId, options }`
-  - 出参：`{ canAnswerHealthQuestion, fallbackMessage, contextResult? }`
-  - 用途：M3 强制个体化守卫；上下文加载失败时统一降级文案
+  - Input: `{ userId, options }`
+  - Output: `{ canAnswerHealthQuestion, fallbackMessage, contextResult? }`
+  - Purpose: M3 mandatory personalization guard; unified fallback when context load fails
 - `health_chat_guard_for_telegram`
-  - 入参：`{ telegramChatId, options }`（`chat_id` 与绑定 webhook 写入的 `integrations.telegramChatId` 一致）
-  - 出参：与 `health_chat_guard` 相同，并附带 `resolvedUserId`、`telegramChatId`；未绑定时 `canAnswerHealthQuestion=false`、`reason=telegram_not_linked`
-  - 用途：Hermes Telegram 多用户（方案 B）；依赖 legacy 中 `findUserIdByTelegramChatId` 与绑定流程
+  - Input: `{ telegramChatId, options }` (`chat_id` must match `integrations.telegramChatId` written by the binding webhook)
+  - Output: same as `health_chat_guard`, plus `resolvedUserId`, `telegramChatId`; when unbound, `canAnswerHealthQuestion=false`, `reason=telegram_not_linked`
+  - Purpose: Hermes Telegram multi-user (scheme B); uses legacy `findUserIdByTelegramChatId` and binding flow
 - `health_analyze_text`
-  - 入参：`{ userId, text, options }`
-  - 出参：`aiServiceFactory.analyzeHealthRecords` 结果
+  - Input: `{ userId, text, options }`
+  - Output: `aiServiceFactory.analyzeHealthRecords` result
 - `risk_detect_anomalies`
-  - 入参：`{ userEmail, dataStream, options }`
-  - 出参：`riskMonitoringService.detectAnomalies` 结果
+  - Input: `{ userEmail, dataStream, options }`
+  - Output: `riskMonitoringService.detectAnomalies` result
 - `report_generate`
-  - 入参：`{ userEmail, reportType, options }`
-  - 出参：`reportService` 生成结果（包含持久化后的报告对象）
+  - Input: `{ userEmail, reportType, options }`
+  - Output: `reportService` generation result (includes persisted report object)
 
-`options` 对应 `buildAIContext`：
+`options` map to `buildAIContext`:
 
 ```json
 {
@@ -63,9 +63,9 @@ npm start
 }
 ```
 
-## 5) Hermes 侧注册示例
+## 5) Hermes registration example
 
-按 Hermes 文档的 MCP 配置方式注册该命令（示意）：
+Register this command per Hermes MCP docs (illustrative):
 
 ```json
 {
@@ -83,48 +83,48 @@ npm start
 }
 ```
 
-> 注意：Hermes 实际配置文件位置和字段请以官方文档为准。
+> Note: actual Hermes config file location and field names follow upstream documentation.
 
-## 6) 建议调用顺序（对话场景）
+## 6) Recommended call order (conversation)
 
-1. 先调 `health_chat_guard`（已知 `userId`）或 `health_chat_guard_for_telegram`（仅知 Telegram `chat_id` 时，方案 B）
-2. 若 `canAnswerHealthQuestion=false`，直接返回 `fallbackMessage`
-3. 若 `canAnswerHealthQuestion=true`，再生成健康回答
-4. 需要深分析时调 `health_analyze_text`
-5. 风险相关问题可调 `risk_detect_anomalies`
+1. Call `health_chat_guard` (when `userId` is known) or `health_chat_guard_for_telegram` (Telegram `chat_id` only, scheme B)
+2. If `canAnswerHealthQuestion=false`, return `fallbackMessage` only
+3. If `canAnswerHealthQuestion=true`, generate the health answer
+4. Call `health_analyze_text` for deeper analysis when needed
+5. Call `risk_detect_anomalies` for risk-related questions
 
-## 7) 建议调用顺序（每日报告）
+## 7) Recommended call order (daily report)
 
-1. 调 `health_context_get` 获取基础档案
-2. 需要趋势判断时调 `risk_detect_anomalies`
-3. 调 `report_generate` 生成并入库报告
+1. Call `health_context_get` for base profile
+2. Call `risk_detect_anomalies` when trend analysis is needed
+3. Call `report_generate` to generate and persist the report
 
-## 8) M3 模板文件
+## 8) M3 template files
 
 - `hermes/M3_system_prompt_template.md`
 - `hermes/M3_tool_call_strategy.md`
 
-可直接拷贝到 Hermes 的系统提示词/团队指令中，确保模型先调用 `health_chat_guard`。
+Copy these into Hermes system prompts or team instructions so the model calls `health_chat_guard` first.
 
-## 9) M4 Skills 草案
+## 9) M4 Skills drafts
 
-见 `hermes/skills/`（`daily-health-report`、`lab-result-extraction`），与 `reportModels.js` 的 `sections` Joi 形状对齐。
+See `hermes/skills/` (`daily-health-report`, `lab-result-extraction`), aligned with `reportModels.js` Joi `sections` shape.
 
-## 10) M5 Cron → Node 回调（日报 → Telegram）
+## 10) M5 Cron → Node webhook (daily report → Telegram)
 
-- **一步步清单：** `hermes/DAILY_REPORT_RUNBOOK.md`
-- 架构说明：`hermes/M5_cron_and_node_webhook.md`
-- 触发脚本：`scripts/trigger-node-daily-report.sh`（`DOCTOR_AGENT_DAILY_DRY_RUN`、`DOCTOR_AGENT_DAILY_USER_EMAILS` 等）
-- launchd 示例：`scripts/launchd/io.hermes.doctor-daily-report.plist.example`
-- Hermes 内置 Cron（经 Agent + terminal 跑脚本）：`hermes/HERMES_CRON_DAILY_REPORT.md`、`scripts/register-hermes-cron-daily-report.sh`
-- 后端环境变量示例：`hermes/doctor-agent-backend.env.example`（复制到 `ai-doctor-agent_legacy/backend/.env`）
-- 脚本索引：`scripts/README.md`
+- **Step-by-step runbook:** `hermes/DAILY_REPORT_RUNBOOK.md`
+- Architecture: `hermes/M5_cron_and_node_webhook.md`
+- Trigger script: `scripts/trigger-node-daily-report.sh` (`DOCTOR_AGENT_DAILY_DRY_RUN`, `DOCTOR_AGENT_DAILY_USER_EMAILS`, etc.)
+- launchd example: `scripts/launchd/io.hermes.doctor-daily-report.plist.example`
+- Hermes built-in Cron (Agent + terminal runs script): `hermes/HERMES_CRON_DAILY_REPORT.md`, `scripts/register-hermes-cron-daily-report.sh`
+- Backend env example: `hermes/doctor-agent-backend.env.example` (copy to `ai-doctor-agent_legacy/backend/.env`)
+- Script index: `scripts/README.md`
 
-## 11) M6 观测 / 熔断 / MCP 审计
+## 11) M6 Observability / circuit breaker / MCP audit
 
-- 检查清单：`hermes/M6_observability_circuit_mcp_audit.md`
-- 实现指南章节：`hermes_implementation_guide.md` §15
+- Checklist: `hermes/M6_observability_circuit_mcp_audit.md`
+- Implementation guide: `hermes_implementation_guide.md` §15
 
-## 12) 仅 Hermes Telegram：个人化对话 + 日报
+## 12) Hermes Telegram only: personalized chat + daily report
 
-- 操作说明：`hermes/Telegram_only_personal_chat_and_daily_report.md`
+- Operations: `hermes/Telegram_only_personal_chat_and_daily_report.md`

@@ -66,4 +66,4 @@ Return **only** valid JSON (no markdown fences) matching:
 ## Safety
 
 - No individualized diagnosis if guard failed.
-- Include a one-line disclaimer: 非医疗诊断，紧急情况请线下就医。
+- Include a one-line disclaimer: Not medical diagnosis; seek in-person care for emergencies.
