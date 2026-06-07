@@ -101,30 +101,34 @@ Register this command per Hermes MCP docs (illustrative):
 
 ## 8) M3 template files
 
-- `hermes/M3_system_prompt_template.md`
-- `hermes/M3_tool_call_strategy.md`
+- `../docs/hermes/M3_system_prompt_template.md`
+- `../docs/hermes/M3_tool_call_strategy.md`
 
 Copy these into Hermes system prompts or team instructions so the model calls `health_chat_guard` first.
 
 ## 9) M4 Skills drafts
 
-See `hermes/skills/` (`daily-health-report`, `lab-result-extraction`), aligned with `reportModels.js` Joi `sections` shape.
+See `../docs/hermes/skills/` (`daily-health-report`, `lab-result-extraction`), aligned with `reportModels.js` Joi `sections` shape.
 
 ## 10) M5 Cron → Node webhook (daily report → Telegram)
 
-- **Step-by-step runbook:** `hermes/DAILY_REPORT_RUNBOOK.md`
-- Architecture: `hermes/M5_cron_and_node_webhook.md`
+- **Step-by-step runbook:** `../docs/hermes/DAILY_REPORT_RUNBOOK.md`
+- Architecture: `../docs/hermes/M5_cron_and_node_webhook.md`
 - Trigger script: `scripts/trigger-node-daily-report.sh` (`DOCTOR_AGENT_DAILY_DRY_RUN`, `DOCTOR_AGENT_DAILY_USER_EMAILS`, etc.)
 - launchd example: `scripts/launchd/io.hermes.doctor-daily-report.plist.example`
-- Hermes built-in Cron (Agent + terminal runs script): `hermes/HERMES_CRON_DAILY_REPORT.md`, `scripts/register-hermes-cron-daily-report.sh`
-- Backend env example: `hermes/doctor-agent-backend.env.example` (copy to `../ai-doctor-agent/backend/.env`)
+- Hermes built-in Cron (Agent + terminal runs script): `../docs/hermes/HERMES_CRON_DAILY_REPORT.md`, `scripts/register-hermes-cron-daily-report.sh`
+- Backend env example: `../docs/hermes/doctor-agent-backend.env.example` (copy to `../ai-doctor-agent/backend/.env`)
 - Script index: `scripts/README.md`
 
 ## 11) M6 Observability / circuit breaker / MCP audit
 
-- Checklist: `hermes/M6_observability_circuit_mcp_audit.md`
-- Implementation guide: `hermes_implementation_guide.md` §15
+- Checklist: `../docs/hermes/M6_observability_circuit_mcp_audit.md`
+- Implementation guide: `../docs/hermes_implementation_guide.md` §15
 
 ## 12) Hermes Telegram only: personalized chat + daily report
 
-- Operations: `hermes/Telegram_only_personal_chat_and_daily_report.md`
+- Operations: `../docs/hermes/Telegram_only_personal_chat_and_daily_report.md`
+
+## Documentation index
+
+Full doc map: [`../docs/README.md`](../docs/README.md)

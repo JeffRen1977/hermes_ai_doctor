@@ -2,7 +2,7 @@
 
 `ai-doctor-agent` (sibling repo) implements **`POST /internal/cron/daily-report`** (Bearer). Scripts in this directory wake that endpoint from **crontab / launchd / cloud Scheduler**.
 
-**Runbook and troubleshooting:** `../hermes/DAILY_REPORT_RUNBOOK.md`  
+**Runbook and troubleshooting:** `../../docs/hermes/DAILY_REPORT_RUNBOOK.md`  
 **macOS schedule example:** `launchd/io.hermes.doctor-daily-report.plist.example` (copy to `~/Library/LaunchAgents/` and edit paths and secrets)
 
 Do not expose this URL on the public internet without Bearer authentication.

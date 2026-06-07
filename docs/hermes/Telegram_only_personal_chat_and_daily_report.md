@@ -12,7 +12,7 @@ Same as `contextBuilderService` / `buildAIContext`: usually a **sanitized email 
 
 ### 2. Telegram `chat_id`
 
-In a private chat with the bot, each user has a numeric **`chat_id`**. M5 daily push reads **`userSettings.integrations.telegramChatId`** on the Node side (see `hermes_implementation_guide.md` §14).
+In a private chat with the bot, each user has a numeric **`chat_id`**. M5 daily push reads **`userSettings.integrations.telegramChatId`** on the Node side (see [`../hermes_implementation_guide.md`](../hermes_implementation_guide.md) §14).
 
 ---
 
@@ -23,7 +23,7 @@ Hermes **does not** automatically know “this Telegram message = which doctor-a
 ### Scheme A — single user / family testing (fastest)
 
 1. Configure MCP per `mcp-doctor-agent-bridge/README.md` (`LEGACY_BACKEND_ROOT`, `MCP_ALLOWED_USER_IDS` **only your** `userId`).  
-2. Copy `hermes/M3_system_prompt_template.md` into Hermes instructions and set your real `userId` (or hard-code: “when calling `health_chat_guard`, `userId` must be `xxx`”).  
+2. Copy `docs/hermes/M3_system_prompt_template.md` into Hermes instructions and set your real `userId` (or hard-code: “when calling `health_chat_guard`, `userId` must be `xxx`”).  
 3. Ensure Hermes enables MCP server `doctor_context` and the model **calls `health_chat_guard` first** for health questions.
 
 Then: **before every health answer**, profile/meds/vitals are loaded from doctor-agent; on failure, degrade — do not invent data.

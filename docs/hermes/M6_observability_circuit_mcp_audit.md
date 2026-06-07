@@ -1,6 +1,6 @@
 # M6 — Observability, circuit breaker, MCP audit
 
-This page is a **checklist and implementation notes** aligned with `hermes_design_document.md` **M6** and **§8 Security**. Cover both Hermes and doctor-agent sides.
+This page is a **checklist and implementation notes** aligned with [`../hermes_design_document.md`](../hermes_design_document.md) **M6** and **§8 Security**. Cover both Hermes and doctor-agent sides.
 
 ---
 

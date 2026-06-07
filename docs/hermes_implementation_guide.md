@@ -38,7 +38,7 @@ This document is for **implementation engineers**: based on installation and con
 
 ### 2.2 Code Boundaries
 
-- **This repository's `hermes/` root directory**: stores **design and integration documentation only**; it no longer contains the `hermes-agent/` Python microservice or a root-level `docker-compose.yml` orchestrating that microservice.
+- **This repository's `docs/` directory**: stores **design and integration documentation**; it no longer contains the `hermes-agent/` Python microservice or a root-level `docker-compose.yml` orchestrating that microservice.
 - **doctor-agent**: incrementally add an **MCP Server** or **internal routes** (e.g. `/internal/mcp/*` bound to localhost only + service token); avoid breaking existing external REST contracts.
 
 ### 2.3 Product Mandatory Requirements (consistent with design §1.2)
@@ -207,7 +207,7 @@ Then explicitly constrain in Persona / instructions:
 - Before answering health questions, must call `health_chat_guard` first
 - If `canAnswerHealthQuestion=false`, return `fallbackMessage` directly
 - If `canAnswerHealthQuestion=true`, prefer using `contextResult.systemPromptContext`
-- Example templates: `mcp-doctor-agent-bridge/hermes/M3_system_prompt_template.md` and `mcp-doctor-agent-bridge/hermes/M3_tool_call_strategy.md`
+- Example templates: `docs/hermes/M3_system_prompt_template.md` and `docs/hermes/M3_tool_call_strategy.md`
 
 ### 6.5 Security Requirements (MCP Version)
 
@@ -255,7 +255,7 @@ Reference: [HermesClaw](https://github.com/AaronWong1999/hermesclaw) and the ups
 
 If the primary entry point is **Telegram + Hermes**, personalization relies on **MCP + `userId` binding**; daily reports rely on **M5 Node cron + `integrations.telegramChatId`**. Step-by-step instructions:
 
-- `mcp-doctor-agent-bridge/hermes/Telegram_only_personal_chat_and_daily_report.md`
+- `docs/hermes/Telegram_only_personal_chat_and_daily_report.md`
 
 ---
 
@@ -283,7 +283,7 @@ hermes doctor
 
 - **MCP**: Mock `buildAIContext`, assert tool return includes `medications` / `vitalsRecent` fields.  
 - **E2E (staging)**: Test user sends Telegram message, logs show `traceId` associated with `userId`, and no full PHI plaintext written to disk.  
-- **M6**: Go through acceptance checklist per §15 and section 4 of `hermes/M6_observability_circuit_mcp_audit.md`.
+- **M6**: Go through acceptance checklist per §15 and section 4 of `docs/hermes/M6_observability_circuit_mcp_audit.md`.
 
 ### 10.3 Existing doctor-agent Unit Tests
 
@@ -317,13 +317,13 @@ Continue running Jest in `ai-doctor-agent/backend`; `contextBuilderService` etc.
 
 ## 13. M4: Skills Draft (Aligned with `reportModels` Joi)
 
-This repository provides **copy-ready** Hermes Skill drafts in `mcp-doctor-agent-bridge/hermes/skills/`:
+This repository provides **copy-ready** Hermes Skill drafts in `docs/hermes/skills/`:
 
 | Path | Purpose |
 |------|------|
-| `hermes/skills/README.md` | Installation instructions and alignment with doctor-agent |
-| `hermes/skills/daily-health-report/SKILL.md` | Daily report / assessment report: call `health_chat_guard` first, output `sections` JSON, then optionally `report_generate` |
-| `hermes/skills/lab-result-extraction/SKILL.md` | Lab text → strict JSON, no fabricated values; personalization still requires passing `health_chat_guard` first |
+| `docs/hermes/skills/README.md` | Installation instructions and alignment with doctor-agent |
+| `docs/hermes/skills/daily-health-report/SKILL.md` | Daily report / assessment report: call `health_chat_guard` first, output `sections` JSON, then optionally `report_generate` |
+| `docs/hermes/skills/lab-result-extraction/SKILL.md` | Lab text → strict JSON, no fabricated values; personalization still requires passing `health_chat_guard` first |
 
 **Joi alignment key points:** `sections` key names must match `reportSchema` in `ai-doctor-agent/backend/src/models/reportModels.js` (`executiveSummary`, `healthMetrics`, `riskAssessment`, `recommendations`, `actionItems`, `charts`, `attachments`). Before persistence, **Node must still** run `reportSchema.validate`.
 
@@ -349,7 +349,7 @@ This repository provides **copy-ready** Hermes Skill drafts in `mcp-doctor-agent
    - WeChat: when `WECHAT_DAILY_REPORT_ENABLED=true`, returns placeholder "not implemented"; for production WeChat, integrate template message SDK separately.  
 2. Wake script in this repository: `mcp-doctor-agent-bridge/scripts/trigger-node-daily-report.sh`  
    - `DOCTOR_AGENT_DAILY_WEBHOOK_URL` points to e.g. `http://127.0.0.1:8000/internal/cron/daily-report` (adjust to doctor-agent's actual port).  
-3. Hermes Cron: execute this script per upstream documentation; see `mcp-doctor-agent-bridge/hermes/M5_cron_and_node_webhook.md`.
+3. Hermes Cron: execute this script per upstream documentation; see `docs/hermes/M5_cron_and_node_webhook.md`.
 
 ### 14.3 Alternative: Node Cron Only
 
@@ -371,7 +371,7 @@ Cloud Scheduler / `node-cron` directly `POST`s to the same webhook, **without de
 
 ### 15.1 Documentation and Checklist
 
-Full checklist: **`mcp-doctor-agent-bridge/hermes/M6_observability_circuit_mcp_audit.md`** (Hermes + Node + MCP bridge on three sides; includes acceptance checklist items).
+Full checklist: **`docs/hermes/M6_observability_circuit_mcp_audit.md`** (Hermes + Node + MCP bridge on three sides; includes acceptance checklist items).
 
 ### 15.2 Mapping to Components in This Repository
 

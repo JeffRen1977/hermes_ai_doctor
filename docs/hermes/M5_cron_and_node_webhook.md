@@ -8,7 +8,7 @@
 
 ## Architecture A (recommended): Hermes Cron → shell → Node
 
-1. doctor-agent implements **`POST /internal/cron/daily-report`** (Bearer; see `hermes_implementation_guide.md` §14). Use **mTLS / private network** in production.
+1. doctor-agent implements **`POST /internal/cron/daily-report`** (Bearer; see [`../hermes_implementation_guide.md`](../hermes_implementation_guide.md) §14). Use **mTLS / private network** in production.
 2. This repo’s script: `mcp-doctor-agent-bridge/scripts/trigger-node-daily-report.sh`  
    Configure `DOCTOR_AGENT_DAILY_WEBHOOK_URL` and `DOCTOR_AGENT_DAILY_WEBHOOK_TOKEN`.
 3. In Hermes, create a scheduled job per [Cron docs](https://hermes-agent.nousresearch.com/docs/user-guide/features/cron) to run that script (or an equivalent one-line `curl`).

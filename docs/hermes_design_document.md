@@ -165,9 +165,9 @@ Agent or Node cron generates body → `reportRepo` → **Telegram** summary/link
 | **M1** | Deploy upstream Hermes Agent; `hermes model` working; `hermes gateway` working (any one endpoint). |
 | **M2** | doctor-agent provides **MCP or internal HTTP**: `getHealthContext(userId)` wrapping `buildAIContext`. |
 | **M3** | Conversation path: **gateway message → inject PHP** (tool fetch or preprocessing script). |
-| **M4** | **Skills**: daily report sections, lab field extraction, etc.; align with Node Joi validation (see repo `mcp-doctor-agent-bridge/hermes/skills/`). |
-| **M5** | **Cron**: daily report generation; **current delivery is Telegram** (Node Bot API or Hermes gateway); WeChat if enabled still sent by Node (examples in `mcp-doctor-agent-bridge/hermes/M5_cron_and_node_webhook.md` and `scripts/`). |
-| **M6** | Observability, circuit breaking, cloud provider fallback; penetration testing and MCP audit (checklist in `mcp-doctor-agent-bridge/hermes/M6_observability_circuit_mcp_audit.md`). |
+| **M4** | **Skills**: daily report sections, lab field extraction, etc.; align with Node Joi validation (see repo `docs/hermes/skills/`). |
+| **M5** | **Cron**: daily report generation; **current delivery is Telegram** (Node Bot API or Hermes gateway); WeChat if enabled still sent by Node (examples in `docs/hermes/M5_cron_and_node_webhook.md` and `scripts/`). |
+| **M6** | Observability, circuit breaking, cloud provider fallback; penetration testing and MCP audit (checklist in `docs/hermes/M6_observability_circuit_mcp_audit.md`). |
 
 ---
 

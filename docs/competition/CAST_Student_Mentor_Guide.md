@@ -3,7 +3,7 @@
 **For:** CAST competition team (senior high school) + parent/teacher mentor  
 **Purpose:** Understand the project, learn Hermes Agent concepts, and run demos safely  
 **Repo:** [github.com/JeffRen1977/hermes_ai_doctor](https://github.com/JeffRen1977/hermes_ai_doctor)  
-**Related docs in this folder:** `CAST_Research_Paper_hermes_ai_doctor.md`, `CAST_Presentation_Outline_hermes_ai_doctor.md`
+**Related docs:** [`../README.md`](../README.md) (doc index); in this folder: `CAST_Research_Paper_hermes_ai_doctor.md`, `CAST_Presentation_Outline_hermes_ai_doctor.md`
 
 ---
 
@@ -101,8 +101,8 @@ Hermes Agent  ←stdio→  mcp-doctor-agent-bridge  ←Node require→  doctor-a
 
 In this repo:
 
-- `hermes/skills/daily-health-report/SKILL.md` — how to draft a daily report JSON
-- `hermes/skills/lab-result-extraction/SKILL.md` — lab text extraction
+- `docs/hermes/skills/daily-health-report/SKILL.md` — how to draft a daily report JSON
+- `docs/hermes/skills/lab-result-extraction/SKILL.md` — lab text extraction
 
 Skills are **optional** for basic demo. The **required** path for health chat is **MCP guard tools**, not skills.
 
@@ -156,7 +156,7 @@ hermes cron list
 - Binding bot + webhook writes `integrations.telegramChatId` in user settings  
 - MCP resolves `telegramChatId` → `userId` (email-based id)
 
-See: `hermes/Telegram_only_personal_chat_and_daily_report.md`
+See: `../hermes/Telegram_only_personal_chat_and_daily_report.md`
 
 ### 3.3 Daily health report
 
@@ -166,7 +166,7 @@ See: `hermes/Telegram_only_personal_chat_and_daily_report.md`
 - Generates report + sends Telegram message  
 - Trigger: `scripts/trigger-node-daily-report.sh` or Hermes cron  
 
-See: `hermes/DAILY_REPORT_RUNBOOK.md`
+See: `../hermes/DAILY_REPORT_RUNBOOK.md`
 
 ### 3.4 Optional advanced tools (mention if asked)
 
@@ -216,13 +216,13 @@ See: `hermes/DAILY_REPORT_RUNBOOK.md`
 
 | Path | Who cares | One-line description |
 |------|-----------|----------------------|
-| `hermes_design_document.md` | Judges / report | Why we built this (English design doc) |
-| `hermes_implementation_guide.md` | Mentors | Engineer checklist |
+| `docs/hermes_design_document.md` | Judges / report | Why we built this (English design doc) |
+| `docs/hermes_implementation_guide.md` | Mentors | Engineer checklist |
 | `mcp-doctor-agent-bridge/README.md` | Everyone | MCP tools list + setup |
 | `mcp-doctor-agent-bridge/src/index.js` | Developers | Registers MCP tools |
 | `mcp-doctor-agent-bridge/src/doctorContextTools.js` | Developers | Guard logic + Firebase calls |
-| `mcp-doctor-agent-bridge/hermes/M3_tool_call_strategy.md` | Students | When to call which tool |
-| `mcp-doctor-agent-bridge/competition/` | CAST team | Paper + slides + this guide |
+| `docs/hermes/M3_tool_call_strategy.md` | Students | When to call which tool |
+| `docs/competition/` | CAST team | Paper + slides + this guide |
 | `ai-doctor-agent/` | Mentors only | Sibling repo — clone next to `hermes/`; not tracked in this repo |
 
 **GitHub public repo** (`hermes_ai_doctor`) has bridge + docs. The **doctor-agent backend** lives in a **sibling repo** (`ai-doctor-agent`) — clone it next to `hermes/` on your laptop.
@@ -237,8 +237,11 @@ This section is the **step-by-step runbook** for mentors. Students can follow al
 
 ```
 ~/Documents/
-├── hermes/                          # This repo (bridge + docs)
-│   └── mcp-doctor-agent-bridge/
+├── hermes/                          # This repo
+│   ├── docs/                        # All reference documentation
+│   │   ├── competition/             # CAST materials (this guide)
+│   │   └── hermes/                  # Runbooks, M3 templates, skills
+│   └── mcp-doctor-agent-bridge/     # Runnable MCP server + scripts
 └── ai-doctor-agent/                 # Doctor-agent backend (Node + Firebase)
     └── backend/
 ```
@@ -268,7 +271,7 @@ git clone https://github.com/JeffRen1977/ai-doctor-agent.git
 #### B. Doctor-agent backend environment
 
 ```bash
-cp ~/Documents/hermes/mcp-doctor-agent-bridge/hermes/doctor-agent-backend.env.example \
+cp ~/Documents/hermes/docs/hermes/doctor-agent-backend.env.example \
    ~/Documents/ai-doctor-agent/backend/.env
 ```
 
@@ -313,7 +316,7 @@ hermes doctor
 hermes setup
 ```
 
-Register MCP in **`~/.hermes/config.yaml`** (see §9 cheat sheet). Copy **`hermes/M3_system_prompt_template.md`** into **`~/.hermes/SOUL.md`** (or merge with existing rules). For Telegram, configure **`health_chat_guard_for_telegram`** (scheme B) or a fixed test `userId` (scheme A).
+Register MCP in **`~/.hermes/config.yaml`** (see §9 cheat sheet). Copy **`docs/hermes/M3_system_prompt_template.md`** into **`~/.hermes/SOUL.md`** (or merge with existing rules). For Telegram, configure **`health_chat_guard_for_telegram`** (scheme B) or a fixed test `userId` (scheme A).
 
 ### 6.4 Start each piece
 
@@ -425,8 +428,9 @@ See `../hermes/HERMES_CRON_DAILY_REPORT.md` for schedule overrides.
 
 | Topic | File |
 |-------|------|
-| MCP tools & env | `../README.md` |
-| Full implementation guide | `../../hermes_implementation_guide.md` |
+| MCP tools & env | `../../mcp-doctor-agent-bridge/README.md` |
+| Documentation index | `../README.md` |
+| Full implementation guide | `../hermes_implementation_guide.md` |
 | Telegram chat + daily report | `../hermes/Telegram_only_personal_chat_and_daily_report.md` |
 | Daily report runbook | `../hermes/DAILY_REPORT_RUNBOOK.md` |
 | Hermes Cron setup | `../hermes/HERMES_CRON_DAILY_REPORT.md` |
@@ -557,7 +561,7 @@ DOCTOR_AGENT_DAILY_WEBHOOK_TOKEN=...
 
 ### ai-doctor-agent/backend/.env (backend)
 
-See `hermes/doctor-agent-backend.env.example`:
+See `../hermes/doctor-agent-backend.env.example`:
 
 - `FIREBASE_API_KEY`, …  
 - `INTERNAL_CRON_BEARER_TOKEN`  
@@ -635,10 +639,10 @@ Logs: `~/.hermes/logs/gateway.log`, `~/.hermes/logs/mcp-stderr.log`
 | CAST paper content | `CAST_Research_Paper_hermes_ai_doctor.md` |
 | Slide bullets | `CAST_Presentation_Outline_hermes_ai_doctor.md` |
 | Teach Hermes + demo + **how to run** | **This file** (§6–§7) |
-| MCP tool details | `../README.md`, `../hermes/M3_tool_call_strategy.md` |
+| MCP tool details | `../../mcp-doctor-agent-bridge/README.md`, `../hermes/M3_tool_call_strategy.md` |
 | Telegram binding | `../hermes/Telegram_only_personal_chat_and_daily_report.md` |
 | Daily report setup | `../hermes/DAILY_REPORT_RUNBOOK.md` |
-| Design rationale | `../../hermes_design_document.md` |
+| Design rationale | `../hermes_design_document.md` |
 
 ---
 

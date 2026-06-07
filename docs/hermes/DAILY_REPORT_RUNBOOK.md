@@ -36,7 +36,7 @@ These three variables apply on the **Node process side** (Railway service / loca
 
 ### 1B. Local doctor-agent
 
-1. Copy **`hermes/doctor-agent-backend.env.example`** → **`../ai-doctor-agent/backend/.env`** (merge if file exists).
+1. Copy **`docs/hermes/doctor-agent-backend.env.example`** → **`../ai-doctor-agent/backend/.env`** (merge if file exists).
 2. Set **`INTERNAL_CRON_BEARER_TOKEN`**, **`CRON_DAILY_REPORT_USER_EMAILS`**, **`TELEGRAM_BOT_TOKEN`**, plus existing Firebase vars.
 3. Start backend (e.g. `npm run dev`), confirm port e.g. `http://127.0.0.1:8000`.
 4. For local tests, **`DOCTOR_AGENT_DAILY_WEBHOOK_URL`** =
@@ -165,4 +165,4 @@ curl -sS -X POST 'https://<host>/internal/cron/daily-report?dryRun=true' \
 | `no_basic_profile` | Incomplete profile in app |
 | Telegram API error | Check **`TELEGRAM_BOT_TOKEN`**; user started bot / not blocked |
 
-More: `hermes/M5_cron_and_node_webhook.md`, `Telegram_only_personal_chat_and_daily_report.md`.
+More: `M5_cron_and_node_webhook.md`, `Telegram_only_personal_chat_and_daily_report.md`.
