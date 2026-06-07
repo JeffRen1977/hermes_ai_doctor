@@ -17,5 +17,5 @@ These folders are **draft skills** you can copy into your Hermes skills director
 
 ## Alignment with doctor-agent
 
-- Report section keys mirror `ai-doctor-agent_legacy/backend/src/models/reportModels.js` → `sections`: `executiveSummary`, `healthMetrics`, `riskAssessment`, `recommendations`, `actionItems`, `charts`, `attachments`.
+- Report section keys mirror `ai-doctor-agent/backend/src/models/reportModels.js` → `sections`: `executiveSummary`, `healthMetrics`, `riskAssessment`, `recommendations`, `actionItems`, `charts`, `attachments`.
 - After the model produces JSON, **Node** should still validate with `reportSchema` before `reportRepo.saveReport`.

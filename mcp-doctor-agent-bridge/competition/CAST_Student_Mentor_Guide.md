@@ -24,6 +24,8 @@
 
 **Disclaimer:** This is an **education / innovation project**, not a medical device. Always tell judges: *“See a doctor for diagnosis and emergencies.”*
 
+**Mentors — to install and run everything:** jump to **§6 How to run the project**.
+
 ---
 
 ## 1. What is Hermes Agent?
@@ -201,7 +203,7 @@ See: `hermes/DAILY_REPORT_RUNBOOK.md`
                             │ Node services
                             ▼
 ┌─────────────────────────────────────────────────────────────┐
-│  ai-doctor-agent_legacy/backend/                             │
+│  ai-doctor-agent/backend/                             │
 │  • contextBuilderService (buildAIContext)                    │
 │  • Firebase / userSettings / reports                         │
 │  • daily-report cron, Telegram sendMessage                   │
@@ -214,22 +216,228 @@ See: `hermes/DAILY_REPORT_RUNBOOK.md`
 
 | Path | Who cares | One-line description |
 |------|-----------|----------------------|
-| `hermes_design_document.md` | Judges / report | Why we built this (Chinese design doc) |
+| `hermes_design_document.md` | Judges / report | Why we built this (English design doc) |
 | `hermes_implementation_guide.md` | Mentors | Engineer checklist |
 | `mcp-doctor-agent-bridge/README.md` | Everyone | MCP tools list + setup |
 | `mcp-doctor-agent-bridge/src/index.js` | Developers | Registers MCP tools |
 | `mcp-doctor-agent-bridge/src/doctorContextTools.js` | Developers | Guard logic + Firebase calls |
 | `mcp-doctor-agent-bridge/hermes/M3_tool_call_strategy.md` | Students | When to call which tool |
 | `mcp-doctor-agent-bridge/competition/` | CAST team | Paper + slides + this guide |
-| `ai-doctor-agent_legacy/` | Mentors only | Real backend (may be gitignored locally) |
+| `ai-doctor-agent/` | Mentors only | Sibling repo — clone next to `hermes/`; not tracked in this repo |
 
-**GitHub public repo** has bridge + docs; legacy backend may live in a **separate private repo** on your laptop.
+**GitHub public repo** (`hermes_ai_doctor`) has bridge + docs. The **doctor-agent backend** lives in a **sibling repo** (`ai-doctor-agent`) — clone it next to `hermes/` on your laptop.
 
 ---
 
-## 6. How to USE the AI Doctor (demo day playbook)
+## 6. How to run the project (setup & operations)
 
-### 6.1 Before the demo (mentor checklist)
+This section is the **step-by-step runbook** for mentors. Students can follow along for a supervised lab session.
+
+### 6.1 Folder layout on your machine
+
+```
+~/Documents/
+├── hermes/                          # This repo (bridge + docs)
+│   └── mcp-doctor-agent-bridge/
+└── ai-doctor-agent/                 # Doctor-agent backend (Node + Firebase)
+    └── backend/
+```
+
+Hermes Agent itself is installed separately under **`~/.hermes/`** (not inside this git repo).
+
+### 6.2 Prerequisites
+
+| Requirement | Notes |
+|-------------|--------|
+| **Node.js ≥ 20** | For doctor-agent and MCP bridge |
+| **Hermes Agent** | [Quickstart install](https://hermes-agent.nousresearch.com/docs/getting-started/quickstart) |
+| **LLM API key** | e.g. OpenAI in `~/.hermes/.env` (GPT-4o recommended if Gemini times out) |
+| **Firebase credentials** | In `ai-doctor-agent/backend/.env` |
+| **Telegram bot token** | For Hermes gateway chat; separate token optional for daily report bot |
+
+### 6.3 One-time setup
+
+#### A. Clone repos (if needed)
+
+```bash
+cd ~/Documents
+git clone https://github.com/JeffRen1977/hermes_ai_doctor.git hermes
+git clone https://github.com/JeffRen1977/ai-doctor-agent.git
+```
+
+#### B. Doctor-agent backend environment
+
+```bash
+cp ~/Documents/hermes/mcp-doctor-agent-bridge/hermes/doctor-agent-backend.env.example \
+   ~/Documents/ai-doctor-agent/backend/.env
+```
+
+Edit `backend/.env` and set at minimum:
+
+- `FIREBASE_API_KEY` (+ other Firebase vars your backend needs)
+- `PORT=8000`
+- `INTERNAL_CRON_BEARER_TOKEN` — random secret for the daily-report webhook (`openssl rand -hex 32`)
+- `CRON_DAILY_REPORT_USER_EMAILS=your-test-user@email.com`
+- `TELEGRAM_BOT_TOKEN` — bot used for daily report `sendMessage`
+
+#### C. MCP bridge environment
+
+```bash
+cd ~/Documents/hermes/mcp-doctor-agent-bridge
+npm install
+cp .env.example .env
+```
+
+Edit `.env` (use **absolute paths** on your machine):
+
+```bash
+LEGACY_BACKEND_ROOT=/Users/YOU/Documents/ai-doctor-agent/backend
+MCP_ALLOWED_USER_IDS=your-test-user@email.com
+```
+
+For daily reports, also add:
+
+```bash
+DOCTOR_AGENT_DAILY_WEBHOOK_URL=http://127.0.0.1:8000/internal/cron/daily-report
+DOCTOR_AGENT_DAILY_WEBHOOK_TOKEN=<same as INTERNAL_CRON_BEARER_TOKEN>
+DOCTOR_AGENT_DAILY_USER_EMAILS=your-test-user@email.com
+```
+
+Use your Railway HTTPS URL instead of `127.0.0.1` when the backend runs in the cloud.
+
+#### D. Hermes Agent
+
+```bash
+curl -fsSL https://raw.githubusercontent.com/NousResearch/hermes-agent/main/scripts/install.sh | bash
+hermes doctor
+hermes setup
+```
+
+Register MCP in **`~/.hermes/config.yaml`** (see §9 cheat sheet). Copy **`hermes/M3_system_prompt_template.md`** into **`~/.hermes/SOUL.md`** (or merge with existing rules). For Telegram, configure **`health_chat_guard_for_telegram`** (scheme B) or a fixed test `userId` (scheme A).
+
+### 6.4 Start each piece
+
+#### Doctor-agent backend (local)
+
+Backend only:
+
+```bash
+cd ~/Documents/ai-doctor-agent
+npm install
+npm run start:backend
+```
+
+Listens on **`http://127.0.0.1:8000`** (or your `PORT`).
+
+Backend + frontend dev servers:
+
+```bash
+npm run dev
+```
+
+Production-style (same as Railway):
+
+```bash
+npm start
+```
+
+#### MCP bridge
+
+You usually **do not** start this yourself — Hermes launches it over stdio when the gateway runs.
+
+Manual smoke test (waits on stdin; stop with Ctrl+C):
+
+```bash
+cd ~/Documents/hermes/mcp-doctor-agent-bridge
+npm start
+```
+
+#### Hermes + Telegram chat
+
+```bash
+hermes gateway start
+```
+
+Or as a background service:
+
+```bash
+hermes gateway install
+hermes gateway start
+```
+
+After config changes: `hermes gateway restart` or `/reload-mcp` in Telegram.
+
+CLI test (no Telegram):
+
+```bash
+hermes
+```
+
+Ask a health question; check `~/.hermes/logs/` for MCP tool calls.
+
+#### Daily health report
+
+**Dry run** (no DB write, no Telegram send):
+
+```bash
+export DOCTOR_AGENT_DAILY_DRY_RUN=1
+bash ~/Documents/hermes/mcp-doctor-agent-bridge/scripts/trigger-node-daily-report.sh
+```
+
+Expect HTTP **200** and `"dryRun": true`.
+
+**Live run:**
+
+```bash
+unset DOCTOR_AGENT_DAILY_DRY_RUN
+bash ~/Documents/hermes/mcp-doctor-agent-bridge/scripts/trigger-node-daily-report.sh
+```
+
+Requires: backend running, user has `integrations.telegramChatId` in Firestore, matching Bearer token on both sides.
+
+**Scheduled (Hermes Cron, e.g. daily 07:00)** — gateway must stay running:
+
+```bash
+hermes gateway start
+bash ~/Documents/hermes/mcp-doctor-agent-bridge/scripts/register-hermes-cron-daily-report.sh
+hermes cron list
+```
+
+See `../hermes/HERMES_CRON_DAILY_REPORT.md` for schedule overrides.
+
+### 6.5 Typical local dev session (3 terminals)
+
+| Terminal | Command | Purpose |
+|----------|---------|---------|
+| 1 | `cd ~/Documents/ai-doctor-agent && npm run start:backend` | Firebase + health APIs |
+| 2 | `hermes gateway start` | Telegram + MCP + LLM |
+| 3 | (optional) dry-run daily report script | Test cron webhook |
+
+### 6.6 Run acceptance checklist
+
+- [ ] `hermes doctor` passes
+- [ ] Telegram health question → MCP `health_chat_guard*` runs → answer uses demo profile
+- [ ] Missing/wrong profile → fallback message, **not** fabricated personalization
+- [ ] Dry-run daily report → HTTP 200
+- [ ] Live daily report → Telegram message received (optional)
+
+### 6.7 Reference docs (deeper detail)
+
+| Topic | File |
+|-------|------|
+| MCP tools & env | `../README.md` |
+| Full implementation guide | `../../hermes_implementation_guide.md` |
+| Telegram chat + daily report | `../hermes/Telegram_only_personal_chat_and_daily_report.md` |
+| Daily report runbook | `../hermes/DAILY_REPORT_RUNBOOK.md` |
+| Hermes Cron setup | `../hermes/HERMES_CRON_DAILY_REPORT.md` |
+
+---
+
+## 7. How to USE the AI Doctor (demo day playbook)
+
+### 7.1 Before the demo (mentor checklist)
+
+Complete **§6** first, then verify:
 
 - [ ] Hermes installed: `hermes doctor`  
 - [ ] Gateway running: `hermes gateway status`  
@@ -240,19 +448,19 @@ See: `hermes/DAILY_REPORT_RUNBOOK.md`
 - [ ] Test user has profile data + optional Telegram binding  
 - [ ] LLM API key works (OpenAI recommended if Gemini times out)
 
-### 6.2 Demo A — CLI (safest for classroom)
+### 7.2 Demo A — CLI (safest for classroom)
 
 **Best for:** Showing MCP tool call without Telegram setup.
 
 1. Open terminal  
-2. Run `hermes chat` (or your installed command)  
+2. Run `hermes` (CLI chat)  
 3. Ask: *“Based on my personal health profile, briefly summarize my basic information.”*  
 4. **Point out:** Agent should call `mcp_doctor_context_health_chat_guard` first  
 5. Show answer cites profile fields from backend  
 
 **If it asks for userId:** Check `SOUL.md` — CLI should use fixed test `userId`.
 
-### 6.3 Demo B — Telegram (wow factor)
+### 7.3 Demo B — Telegram (wow factor)
 
 1. Send message to your Hermes Telegram bot  
 2. Ask a health-related question in Chinese  
@@ -261,18 +469,18 @@ See: `hermes/DAILY_REPORT_RUNBOOK.md`
 
 **Do not** show real PHI on projector — use a **demo account** with fake/safe data.
 
-### 6.4 Demo C — Daily report (optional)
+### 7.4 Demo C — Daily report (optional)
 
 **Dry run (no Telegram send):**
 
 ```bash
 export DOCTOR_AGENT_DAILY_DRY_RUN=1
-bash mcp-doctor-agent-bridge/scripts/trigger-node-daily-report.sh
+bash ~/Documents/hermes/mcp-doctor-agent-bridge/scripts/trigger-node-daily-report.sh
 ```
 
 Explain JSON response: `dryRun`, `userEmail`, `wouldGenerate`.
 
-### 6.5 Useful Hermes chat commands
+### 7.5 Useful Hermes chat commands
 
 | Command | Effect |
 |---------|--------|
@@ -284,7 +492,7 @@ Explain JSON response: `dryRun`, `userEmail`, `wouldGenerate`.
 
 ---
 
-## 7. How to DEVELOP / extend (student-safe experiments)
+## 8. How to DEVELOP / extend (student-safe experiments)
 
 ### Level 1 — No coding (configuration)
 
@@ -314,7 +522,7 @@ Explain JSON response: `dryRun`, `userEmail`, `wouldGenerate`.
 
 ---
 
-## 8. Configuration cheat sheet (mentor)
+## 9. Configuration cheat sheet (mentor)
 
 ### ~/.hermes/config.yaml (key parts)
 
@@ -329,7 +537,7 @@ mcp_servers:
     args:
       - /ABSOLUTE/PATH/mcp-doctor-agent-bridge/src/index.js
     env:
-      LEGACY_BACKEND_ROOT: /ABSOLUTE/PATH/ai-doctor-agent_legacy/backend
+      LEGACY_BACKEND_ROOT: /ABSOLUTE/PATH/ai-doctor-agent/backend
       MCP_ALLOWED_USER_IDS: 'your-test-user@email.com'
 
 telegram:
@@ -347,7 +555,7 @@ DOCTOR_AGENT_DAILY_WEBHOOK_URL=...   # for daily report trigger
 DOCTOR_AGENT_DAILY_WEBHOOK_TOKEN=...
 ```
 
-### ai-doctor-agent_legacy/backend/.env (backend)
+### ai-doctor-agent/backend/.env (backend)
 
 See `hermes/doctor-agent-backend.env.example`:
 
@@ -358,7 +566,7 @@ See `hermes/doctor-agent-backend.env.example`:
 
 ---
 
-## 9. CAST presentation script (8 minutes)
+## 10. CAST presentation script (8 minutes)
 
 | Min | Slide topic | Do / say |
 |-----|-------------|----------|
@@ -375,7 +583,7 @@ Assign roles: **Speaker 1** architecture, **Speaker 2** demo, **Speaker 3** safe
 
 ---
 
-## 10. Troubleshooting (quick)
+## 11. Troubleshooting (quick)
 
 | Symptom | Likely cause | Fix |
 |---------|--------------|-----|
@@ -390,7 +598,7 @@ Logs: `~/.hermes/logs/gateway.log`, `~/.hermes/logs/mcp-stderr.log`
 
 ---
 
-## 11. Glossary (for Q&A)
+## 12. Glossary (for Q&A)
 
 | Term | Simple definition |
 |------|-------------------|
@@ -406,11 +614,11 @@ Logs: `~/.hermes/logs/gateway.log`, `~/.hermes/logs/mcp-stderr.log`
 
 ---
 
-## 12. Study plan for the team (1 week)
+## 13. Study plan for the team (1 week)
 
 | Day | Activity |
 |-----|----------|
-| Day 1 | Read §0–§2 of this guide; watch parent demo CLI |
+| Day 1 | Read §0–§2 and §6 of this guide; watch parent demo CLI |
 | Day 2 | Draw architecture from memory; label MCP |
 | Day 3 | Each student explains one MCP tool to the group |
 | Day 4 | Rehearse slides; assign speaking parts |
@@ -420,13 +628,13 @@ Logs: `~/.hermes/logs/gateway.log`, `~/.hermes/logs/mcp-stderr.log`
 
 ---
 
-## 13. Document map (what to read when)
+## 14. Document map (what to read when)
 
 | Need | Read |
 |------|------|
 | CAST paper content | `CAST_Research_Paper_hermes_ai_doctor.md` |
 | Slide bullets | `CAST_Presentation_Outline_hermes_ai_doctor.md` |
-| Teach Hermes + demo | **This file** |
+| Teach Hermes + demo + **how to run** | **This file** (§6–§7) |
 | MCP tool details | `../README.md`, `../hermes/M3_tool_call_strategy.md` |
 | Telegram binding | `../hermes/Telegram_only_personal_chat_and_daily_report.md` |
 | Daily report setup | `../hermes/DAILY_REPORT_RUNBOOK.md` |
@@ -434,10 +642,10 @@ Logs: `~/.hermes/logs/gateway.log`, `~/.hermes/logs/mcp-stderr.log`
 
 ---
 
-## 14. Ethics statement (read aloud at competition)
+## 15. Ethics statement (read aloud at competition)
 
 > Our project helps users understand health information using their own stored profile. It is **not** a doctor, **not** for emergencies, and **not** approved medical equipment. We designed it so the AI **cannot pretend** to know your records unless it successfully loads them through a secured tool. We believe responsible AI in healthcare means **privacy, honesty, and human oversight**.
 
 ---
 
-*Good luck at CAST! Questions for the mentor: start with `hermes doctor` and Section 10 troubleshooting.*
+*Good luck at CAST! Questions for the mentor: start with `hermes doctor`, Section 6 (run setup), and Section 11 (troubleshooting).*

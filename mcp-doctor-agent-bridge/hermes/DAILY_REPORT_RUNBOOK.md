@@ -17,7 +17,7 @@ These three variables apply on the **Node process side** (Railway service / loca
 
 ### 1A. Railway
 
-1. Open [Railway Dashboard](https://railway.app/) → select the **doctor-agent** service (deploying `ai-doctor-agent_legacy/backend`).
+1. Open [Railway Dashboard](https://railway.app/) → select the **doctor-agent** service (deploying `ai-doctor-agent/backend`).
 2. Go to **Variables** (or **Settings → Variables**).
 3. Add each variable (names must match exactly):
 
@@ -36,7 +36,7 @@ These three variables apply on the **Node process side** (Railway service / loca
 
 ### 1B. Local doctor-agent
 
-1. Copy **`hermes/doctor-agent-backend.env.example`** → **`ai-doctor-agent_legacy/backend/.env`** (merge if file exists).
+1. Copy **`hermes/doctor-agent-backend.env.example`** → **`../ai-doctor-agent/backend/.env`** (merge if file exists).
 2. Set **`INTERNAL_CRON_BEARER_TOKEN`**, **`CRON_DAILY_REPORT_USER_EMAILS`**, **`TELEGRAM_BOT_TOKEN`**, plus existing Firebase vars.
 3. Start backend (e.g. `npm run dev`), confirm port e.g. `http://127.0.0.1:8000`.
 4. For local tests, **`DOCTOR_AGENT_DAILY_WEBHOOK_URL`** =

@@ -3,7 +3,7 @@
 **Status:** v1.0 (English version, aligned with NousResearch/hermes-agent)  
 **Maintainer:** TBD  
 **Last Updated:** 2026-05-01  
-**Scope:** Focuses primarily on **backend and data flow**; the primary user entry point may be **WeChat** (on-demand conversation + daily reports). **Orchestration and Agent runtime** use the open-source **[NousResearch/hermes-agent](https://github.com/NousResearch/hermes-agent)** (MIT); we **no longer** maintain a custom FastAPI "Hermes microservice" in this repository. The source of business truth remains **`ai-doctor-agent_legacy/`** (Node + Firebase, etc.).
+**Scope:** Focuses primarily on **backend and data flow**; the primary user entry point may be **WeChat** (on-demand conversation + daily reports). **Orchestration and Agent runtime** use the open-source **[NousResearch/hermes-agent](https://github.com/NousResearch/hermes-agent)** (MIT); we **no longer** maintain a custom FastAPI "Hermes microservice" in this repository. The source of business truth remains the sibling repo **`../ai-doctor-agent/`** ([JeffRen1977/ai-doctor-agent](https://github.com/JeffRen1977/ai-doctor-agent); Node + Firebase, etc.).
 
 **Official Documentation:** [hermes-agent.nousresearch.com/docs](https://hermes-agent.nousresearch.com/docs/)
 
@@ -47,14 +47,14 @@ All **health-related answers** delivered to users (including WeChat conversation
 | Term | Description |
 |------|------|
 | **Hermes Agent (upstream)** | Nous Research open-source Agent: [github.com/NousResearch/hermes-agent](https://github.com/NousResearch/hermes-agent). Includes CLI, **Messaging Gateway** (Telegram, Discord, etc.), **MCP**, **Cron**, **Skills**, multi-terminal backends. |
-| **doctor-agent / legacy backend** | `ai-doctor-agent_legacy/backend`: Express, `aiServiceFactory`, `contextBuilderService`, `AIContextPayload`. |
+| **doctor-agent backend** | `../ai-doctor-agent/backend`: Express, `aiServiceFactory`, `contextBuilderService`, `AIContextPayload`. |
 | **Hermes LLM** | Any upstream-supported inference endpoint (OpenRouter, self-hosted OpenAI-compatible gateway, etc.), configured via `hermes model`. |
 | **PHP** | Personal Health Payload: normalized personal health context; corresponds to `AIContextPayload` and extension fields. |
 | **HermesClaw** | Community WeChat bridge: [github.com/AaronWong1999/hermesclaw](https://github.com/AaronWong1999/hermesclaw) (referenced in upstream README); read its security notes for OpenClaw/Hermes same-account scenarios. |
 
 ---
 
-## 3. Current State Analysis (`ai-doctor-agent_legacy`)
+## 3. Current State Analysis (`ai-doctor-agent`)
 
 Existing capabilities directly relevant to integration:
 
@@ -83,7 +83,7 @@ Existing capabilities directly relevant to integration:
                              │ MCP / HTTPS (internal network)
                              ▼
 ┌─────────────────────────────────────────────────────────────────┐
-│  doctor-agent (Node, `ai-doctor-agent_legacy/backend`)           │
+│  doctor-agent (Node, `ai-doctor-agent/backend`)           │
 │  Users, profiles, reports, notifications, WeChat access_token, template messages │
 │  `buildAIContext` / `formatContextForSystemPrompt` / repositories │
 └─────────────────────────────────────────────────────────────────┘
@@ -185,9 +185,9 @@ Agent or Node cron generates body → `reportRepo` → **Telegram** summary/link
 
 | Capability | Path |
 |------|------|
-| AI factory | `ai-doctor-agent_legacy/backend/src/services/aiServiceFactory.js` |
-| Context | `ai-doctor-agent_legacy/backend/src/services/contextBuilderService.js` |
-| Risk monitoring | `ai-doctor-agent_legacy/backend/src/services/riskMonitoringService.js` |
+| AI factory | `ai-doctor-agent/backend/src/services/aiServiceFactory.js` |
+| Context | `ai-doctor-agent/backend/src/services/contextBuilderService.js` |
+| Risk monitoring | `ai-doctor-agent/backend/src/services/riskMonitoringService.js` |
 
 ---
 

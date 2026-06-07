@@ -67,7 +67,7 @@ User (Telegram) → Hermes Gateway → LLM + MCP tools
                                       ↓
                          mcp-doctor-agent-bridge (stdio MCP)
                                       ↓
-                         ai-doctor-agent_legacy (Node / Firebase)
+                         ai-doctor-agent (Node / Firebase)
 ```
 
 ### Model Context Protocol (MCP)

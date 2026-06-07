@@ -2,10 +2,10 @@
 
 **Version:** 2.0  
 **Related design:** `hermes_design_document.md`  
-**Legacy backend:** `ai-doctor-agent_legacy/backend` (paths are relative to this repository; this directory may be ignored by the root `.gitignore`; changes must be committed in the corresponding repository)  
+**Backend:** `../ai-doctor-agent/backend` (sibling repository; clone [JeffRen1977/ai-doctor-agent](https://github.com/JeffRen1977/ai-doctor-agent) next to this repo)  
 **Last updated:** 2026-05-01  
 
-This document is for **implementation engineers**: based on installation and configuration of **[NousResearch/hermes-agent](https://github.com/NousResearch/hermes-agent)**, it explains how to integrate with `ai-doctor-agent_legacy` (MCP / internal HTTP / Cron / **Telegram** / WeChat optional). It does **not** include the custom `hermes-agent/` FastAPI service that has been removed from this repository.
+This document is for **implementation engineers**: based on installation and configuration of **[NousResearch/hermes-agent](https://github.com/NousResearch/hermes-agent)**, it explains how to integrate with `ai-doctor-agent` (MCP / internal HTTP / Cron / **Telegram** / WeChat optional). It does **not** include the custom `hermes-agent/` FastAPI service that has been removed from this repository.
 
 **Required upstream documentation:** [hermes-agent.nousresearch.com/docs](https://hermes-agent.nousresearch.com/docs/)
 
@@ -33,7 +33,7 @@ This document is for **implementation engineers**: based on installation and con
 ### 2.1 Skills and Tools
 
 - An environment capable of running the upstream install script (Linux / macOS / WSL2; **native Windows is not supported** — use WSL2). Reference: [Quickstart](https://hermes-agent.nousresearch.com/docs/getting-started/quickstart).
-- Node.js and the existing `ai-doctor-agent_legacy/backend` runtime remain unchanged.
+- Node.js and the existing `ai-doctor-agent/backend` runtime remain unchanged.
 - Internal network connectivity: the host running the Agent must be able to reach doctor-agent via MCP or HTTPS (firewall allowlist).
 
 ### 2.2 Code Boundaries
@@ -287,7 +287,7 @@ hermes doctor
 
 ### 10.3 Existing doctor-agent Unit Tests
 
-Continue running Jest in `ai-doctor-agent_legacy/backend`; `contextBuilderService` etc. are decoupled from Hermes and should all pass without starting the Agent.
+Continue running Jest in `ai-doctor-agent/backend`; `contextBuilderService` etc. are decoupled from Hermes and should all pass without starting the Agent.
 
 ---
 
@@ -325,7 +325,7 @@ This repository provides **copy-ready** Hermes Skill drafts in `mcp-doctor-agent
 | `hermes/skills/daily-health-report/SKILL.md` | Daily report / assessment report: call `health_chat_guard` first, output `sections` JSON, then optionally `report_generate` |
 | `hermes/skills/lab-result-extraction/SKILL.md` | Lab text → strict JSON, no fabricated values; personalization still requires passing `health_chat_guard` first |
 
-**Joi alignment key points:** `sections` key names must match `reportSchema` in `ai-doctor-agent_legacy/backend/src/models/reportModels.js` (`executiveSummary`, `healthMetrics`, `riskAssessment`, `recommendations`, `actionItems`, `charts`, `attachments`). Before persistence, **Node must still** run `reportSchema.validate`.
+**Joi alignment key points:** `sections` key names must match `reportSchema` in `ai-doctor-agent/backend/src/models/reportModels.js` (`executiveSummary`, `healthMetrics`, `riskAssessment`, `recommendations`, `actionItems`, `charts`, `attachments`). Before persistence, **Node must still** run `reportSchema.validate`.
 
 **Upstream documentation:** [Skills](https://hermes-agent.nousresearch.com/docs/user-guide/features/skills)
 
@@ -342,7 +342,7 @@ This repository provides **copy-ready** Hermes Skill drafts in `mcp-doctor-agent
 
 ### 14.2 Recommended Integration: Hermes Cron → `curl` → Node
 
-1. **Implemented (`ai-doctor-agent_legacy`)**: `POST /internal/cron/daily-report`  
+1. **Implemented (`ai-doctor-agent`)**: `POST /internal/cron/daily-report`  
    - Authentication: `Authorization: Bearer <token>`, token from **`INTERNAL_CRON_BEARER_TOKEN`** or **`DOCTOR_AGENT_DAILY_WEBHOOK_TOKEN`** (consistent with wake script). Returns **503** when token is not configured.  
    - User list: request body **`{ "userEmails": ["a@b.com"] }`**, or environment variable **`CRON_DAILY_REPORT_USER_EMAILS`** (comma-separated). Returns 200 with explanation when no users, no error thrown.  
    - Flow: `buildAIContext` (all enabled) → skip if no basic profile → **`reportService.generateHealthAssessmentReport`** (includes `reportRepo` persistence) → send summary via **`TELEGRAM_BOT_TOKEN` + `userSettings.integrations.telegramChatId`**; `?dryRun=true` or body `dryRun:true` runs drill only without writing to DB or calling Telegram.  

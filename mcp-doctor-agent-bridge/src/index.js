@@ -15,7 +15,7 @@ const projectRoot = path.resolve(__dirname, "..");
 
 const legacyBackendRoot =
   process.env.LEGACY_BACKEND_ROOT ||
-  path.resolve(projectRoot, "..", "ai-doctor-agent_legacy", "backend");
+  path.resolve(projectRoot, "..", "..", "ai-doctor-agent", "backend");
 
 // Load doctor-agent backend/.env so Firebase (FIREBASE_API_KEY, etc.) is set when Hermes or `npm start` runs from this repo.
 dotenv.config({ path: path.join(legacyBackendRoot, ".env") });

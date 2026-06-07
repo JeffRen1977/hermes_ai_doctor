@@ -1,6 +1,6 @@
 # MCP Doctor-Agent Bridge
 
-This directory is a minimal runnable example: it exposes `contextBuilderService` from `ai-doctor-agent_legacy/backend` to Hermes Agent via MCP tools.
+This directory is a minimal runnable example: it exposes `contextBuilderService` from `ai-doctor-agent/backend` to Hermes Agent via MCP tools.
 
 ## 1) Install
 
@@ -13,7 +13,7 @@ npm install
 
 Copy `.env.example` and adjust paths for your machine:
 
-- `LEGACY_BACKEND_ROOT`: absolute path to `ai-doctor-agent_legacy/backend`
+- `LEGACY_BACKEND_ROOT`: absolute path to `ai-doctor-agent/backend` (sibling repo at `../ai-doctor-agent`)
 - **`backend/.env`** in that directory is loaded automatically when MCP starts (must include Firebase `FIREBASE_API_KEY`, etc., same as running doctor-agent locally); `mcp-doctor-agent-bridge/.env` can override those variables.
 - `MCP_ALLOWED_USER_IDS`: optional comma-separated allowlist of userId values
 - `MCP_MAX_CONTEXT_CHARS`: truncation length for `formatContextForSystemPrompt`
@@ -74,7 +74,7 @@ Register this command per Hermes MCP docs (illustrative):
       "command": "node",
       "args": ["/Users/jeffren/Documents/hermes/mcp-doctor-agent-bridge/src/index.js"],
       "env": {
-        "LEGACY_BACKEND_ROOT": "/Users/jeffren/Documents/hermes/ai-doctor-agent_legacy/backend",
+        "LEGACY_BACKEND_ROOT": "/Users/jeffren/Documents/ai-doctor-agent/backend",
         "MCP_ALLOWED_USER_IDS": "",
         "MCP_MAX_CONTEXT_CHARS": "8000"
       }
@@ -117,7 +117,7 @@ See `hermes/skills/` (`daily-health-report`, `lab-result-extraction`), aligned w
 - Trigger script: `scripts/trigger-node-daily-report.sh` (`DOCTOR_AGENT_DAILY_DRY_RUN`, `DOCTOR_AGENT_DAILY_USER_EMAILS`, etc.)
 - launchd example: `scripts/launchd/io.hermes.doctor-daily-report.plist.example`
 - Hermes built-in Cron (Agent + terminal runs script): `hermes/HERMES_CRON_DAILY_REPORT.md`, `scripts/register-hermes-cron-daily-report.sh`
-- Backend env example: `hermes/doctor-agent-backend.env.example` (copy to `ai-doctor-agent_legacy/backend/.env`)
+- Backend env example: `hermes/doctor-agent-backend.env.example` (copy to `../ai-doctor-agent/backend/.env`)
 - Script index: `scripts/README.md`
 
 ## 11) M6 Observability / circuit breaker / MCP audit

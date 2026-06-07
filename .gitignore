@@ -1,5 +1,4 @@
-# Legacy app vendored locally; not tracked in this repo (see docs for integration paths).
-ai-doctor-agent_legacy/
+# Doctor-agent backend lives in sibling repo ../ai-doctor-agent (not tracked here).
 
 .DS_Store
 .env
