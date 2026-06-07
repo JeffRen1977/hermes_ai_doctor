@@ -40,7 +40,7 @@ Our family project started from a practical question: **How can we use a powerfu
 We chose:
 
 - **Hermes Agent** — an open-source agent platform with messaging gateway, tools, cron jobs, and MCP support ([NousResearch/hermes-agent](https://github.com/NousResearch/hermes-agent)).
-- **doctor-agent (legacy backend)** — an existing Node.js + Firebase application that already builds structured health context (`buildAIContext`) for each user.
+- **doctor-agent (ai-doctor-agent)** — a Node.js + Firebase application (sibling repository) that stores personal health data and builds structured AI context (`buildAIContext`) for each user.
 - **MCP Doctor-Agent Bridge** — a small Node.js MCP server we developed to expose health tools to Hermes without giving the AI direct database access.
 
 This combination fits the CAST summit themes of **AI**, **healthcare innovation**, and **interdisciplinary engineering** (software + medicine + ethics).
@@ -60,15 +60,97 @@ The system has three layers:
    Hermes selects an LLM (e.g., GPT-4o or Gemini), follows instructions in `SOUL.md` and channel-specific prompts, and calls **MCP tools** when health context is required.
 
 3. **Health data backend (doctor-agent)**  
-   Firebase-backed user settings, vitals, medications, and reports. Context is built by `contextBuilderService` and formatted for the model by `formatContextForSystemPrompt`.
+   A Node.js / Express server backed by **Firebase Firestore** (optional MongoDB adapter). It is the **system of record** for profiles, medications, vitals, chat history, and generated reports. Context is built by `contextBuilderService` and formatted for the model by `formatContextForSystemPrompt`.
 
 ```
 User (Telegram) → Hermes Gateway → LLM + MCP tools
                                       ↓
                          mcp-doctor-agent-bridge (stdio MCP)
                                       ↓
-                         ai-doctor-agent (Node / Firebase)
+                         ai-doctor-agent/backend (Express + Firebase)
+                                      ↑
+                    Mobile app (JWT REST /api/*) — same database
 ```
+
+### Doctor-agent backend implementation
+
+The backend lives in the **`ai-doctor-agent`** repository (`backend/` directory). It predates the Hermes integration and serves both a **Capacitor mobile web app** and **automation endpoints** used by Hermes cron and Telegram binding. Hermes does **not** call the mobile REST API for chat; instead, the MCP bridge loads backend **services in-process** via Node `require`, using the same Firebase repositories as the app.
+
+#### Technology stack
+
+| Component | Choice | Role |
+|-----------|--------|------|
+| Runtime | Node.js ≥ 20 | Server and shared logic with MCP bridge |
+| HTTP | Express 4 | REST API, static PWA hosting, internal webhooks |
+| Database | Firebase Firestore (default) | User profiles, vitals, medications, reports |
+| Auth (app) | JWT + Firebase Auth | Mobile and web clients |
+| AI providers | Factory pattern (Gemini, OpenAI, Ernie, Qwen) | Analysis, chat, report text generation |
+| Validation | Joi schemas | Report sections, payloads |
+
+Entry point: `backend/src/index.js`. Data access uses a **repository facade** over Firestore adapters (`userSettings`, `personalHealthRecords`, `reports`, etc.).
+
+#### Core services (functionality provided)
+
+| Service | Key functions | Purpose |
+|---------|---------------|---------|
+| **`contextBuilderService`** | `buildAIContext(userId, options)`, `formatContextForSystemPrompt(payload)` | Assembles ephemeral AI context from profile, medications, recent vitals, and chat; formats prompt blocks for the LLM. **Not exposed over REST** — used by app chat routes and MCP bridge. |
+| **`aiServiceFactory`** | `analyzeHealthRecords`, `healthChat`, `checkDrugInteractions`, image/PDF analysis | Multi-provider AI tasks for the mobile app and report generation. |
+| **`reportService`** | `generateHealthAssessmentReport`, `generateComprehensiveReport`, `getUserReports` | LLM-generated structured reports (executive summary, metrics, risks, recommendations) persisted to Firestore. |
+| **`riskMonitoringService`** | `detectAnomalies`, `processStreamData`, `predictHypoglycemia`, `generateAlert` | Wearable-style stream processing, rule + LLM anomaly detection, alert storage. |
+| **`telegramIntegrationService`** | `createTelegramBindCode`, `bindTelegramChat`, `sendTelegramText` | One-time 6-character bind codes and Telegram Bot API messaging. |
+| **`dailyReportCronService`** | `runDailyReportBatch` | Batch job: context check → report generation → Telegram summary per user. |
+
+**User identity:** Firestore document ids use a **sanitized email** (e.g., `jianfengren.sd@gmail.com` → `jianfengren_sd_gmail_com`), consistent across app, MCP allowlists, and cron user lists.
+
+#### Data stored (selected Firestore collections)
+
+| Collection / path | Content |
+|-------------------|---------|
+| `userSettings/{userId}` | AI preferences, **`integrations.telegramChatId`** for Telegram push |
+| `personalHealthRecords/{userId}` | Core health profile |
+| `…/medications`, `…/vitals_daily`, `…/chat_sessions` | Subcollections used by `buildAIContext` |
+| `reports/{reportId}` | Generated daily / assessment reports |
+| `telegramBindingCodes/{code}` | Short-lived bind codes (≈15 min TTL) |
+| `wearableStreamData`, `riskAlerts` | Optional wearable and risk-monitoring data |
+
+Hermes **MEMORY.md** is intentionally **not** the medical record; clinical truth stays in Firestore and is loaded fresh per MCP call.
+
+#### API surface: mobile app vs Hermes
+
+**Mobile / PWA (JWT `Authorization: Bearer`):** Routes under `/api/*` include authentication, chat, health records, wearables, health analysis, user settings, digital twin, risk monitoring, intervention engine, rehabilitation assistant, reports, appointments, emergency contacts, and **`POST /api/integrations/telegram/bind-code`** (issues bind code from the app).
+
+**Hermes integration (two paths):**
+
+1. **MCP bridge (personalized chat)** — Hermes calls MCP tools; the bridge invokes the same backend services directly (no HTTP). Tools map to: context guard, text analysis, anomaly detection, report generation.
+2. **Internal HTTP (automation only)** — Bearer- or secret-protected routes not used by the mobile app:
+
+| Endpoint | Auth | Function |
+|----------|------|----------|
+| `POST /internal/cron/daily-report` | Bearer token | Runs `runDailyReportBatch`: build context, generate report, send Telegram summary |
+| `POST /internal/telegram/webhook` | Optional webhook secret | Receives bind code from Telegram bot; writes `telegramChatId` to user settings |
+
+This split keeps the **conversational agent** on MCP (auditable tool calls) while **scheduled jobs and binding webhooks** use simple HTTP triggers suitable for cron scripts and Telegram.
+
+#### Telegram account binding (backend flow)
+
+1. User logs into the **mobile app** and requests **`POST /api/integrations/telegram/bind-code`** → receives a 6-character code (stored in `telegramBindingCodes`, expires in ~15 minutes).  
+2. User sends the code to the **Telegram binding bot**.  
+3. Telegram posts an update to **`POST /internal/telegram/webhook`**.  
+4. `bindTelegramChat(chatId, code)` validates the code, deletes it, and saves **`integrations.telegramChatId`** on the user’s `userSettings` document.  
+5. MCP tool **`health_chat_guard_for_telegram`** later resolves `chat_id` → `userId` via `findUserIdByTelegramChatId` before loading health context.
+
+#### Daily report batch (backend flow)
+
+When **`POST /internal/cron/daily-report`** is called (by Hermes cron script, launchd, or Railway scheduler):
+
+1. **`internalCronAuth`** validates the Bearer token.  
+2. **`runDailyReportBatch`** reads user emails from the request body or env `CRON_DAILY_REPORT_USER_EMAILS`.  
+3. For each user: **`buildAIContext`** — if no real profile (placeholder only), skip with `no_basic_profile`.  
+4. Unless `dryRun=true`: **`generateHealthAssessmentReport`** persists a report; **`sendTelegramSummary`** sends the executive summary via **`TELEGRAM_BOT_TOKEN`**.  
+5. JSON response lists per-user status (`success`, `skipped`, `error`).
+
+Dry-run mode supports competition demos and testing without LLM cost or live Telegram sends.
+
 
 ### Model Context Protocol (MCP)
 
@@ -90,7 +172,7 @@ For each health-related user message:
 
 1. Agent receives the message on Telegram (or CLI for testing).
 2. Agent calls **`health_chat_guard_for_telegram`** with `telegramChatId` and options: medications, recent vitals, recent chat, language `zh` or `en`.
-3. Bridge loads legacy services, runs `buildAIContext`, checks allowlist (`MCP_ALLOWED_USER_IDS` in production).
+3. Bridge loads backend services in-process, runs `buildAIContext`, checks allowlist (`MCP_ALLOWED_USER_IDS` in production).
 4. If `canAnswerHealthQuestion` is **false**, the user sees only `fallbackMessage` — no fabricated diagnosis.
 5. If **true**, the agent answers using `systemPromptContext` and states that the reply is based on the user’s stored profile.
 
@@ -101,13 +183,9 @@ For each health-related user message:
 
 ### Scheduled daily reports
 
-A **cron pipeline** triggers `POST /internal/cron/daily-report` on the backend (Bearer token). The backend:
+A **cron pipeline** (Hermes built-in cron, macOS launchd, or cloud scheduler) runs `trigger-node-daily-report.sh`, which calls **`POST /internal/cron/daily-report`** on the backend with a Bearer token matching `INTERNAL_CRON_BEARER_TOKEN`. The backend batch service (see **Daily report batch** above) builds context, generates a health assessment report, and sends an executive summary to the user’s bound Telegram `chat_id`. Hermes cron may also deliver a short status message to the mentor channel when the script completes.
 
-1. Builds AI context per user.  
-2. Generates a health assessment report.  
-3. Sends an executive summary to Telegram via Bot API.
-
-Hermes can also schedule a cron job that runs a shell script (`trigger-node-daily-report.sh`) to wake this endpoint daily.
+Dry-run (`dryRun=true`) validates connectivity and user eligibility without report writes or Telegram delivery.
 
 ### Safety and privacy controls
 
@@ -129,15 +207,15 @@ Hermes can also schedule a cron job that runs a shell script (`trigger-node-dail
 
 1. **Guard-first design:** Unlike a chatbot that always answers immediately, our agent must pass a **health chat guard** that proves personal context was loaded. This reduces “hallucinated personalization.”
 
-2. **Separation of concerns:** Hermes handles conversation, tools, and scheduling; doctor-agent remains the **system of record** for health data. MCP is the narrow bridge — easier to audit than giving the LLM database credentials.
+2. **Separation of concerns:** Hermes handles conversation, tools, and scheduling; **doctor-agent** remains the **system of record** for health data (Firestore + Express API for the mobile app). MCP is the narrow bridge for chat — easier to audit than giving the LLM database credentials. Internal HTTP routes handle cron and Telegram binding separately from `/api/*`.
 
 3. **Dual-channel identity:** Same backend serves CLI (known `userId`) and Telegram (chat id binding), using one MCP server with two entry tools.
 
-4. **Composable open stack:** We integrate **open-source** Hermes Agent with an existing health backend without rewriting either system — a pattern other student teams could reuse for finance, education, or sports analytics.
+4. **Composable open stack:** We integrate **open-source** Hermes Agent with an existing full-stack health backend (mobile app + Firebase + AI services) without rewriting either system — a pattern other student teams could reuse for finance, education, or sports analytics.
 
-5. **Operational hooks for growth:** Daily cron, report generation, and observability checklist (M6) support moving from demo to a monitored pilot.
+5. **Dual integration model:** In-process MCP for interactive guard-first chat; REST internal webhooks for scheduled reports and Telegram binding — each path uses the appropriate interface for its job.
 
----
+6. **Operational hooks for growth:** Daily cron batch service, structured report persistence, and observability checklist (M6) support moving from demo to a monitored pilot.
 
 ## Results / Findings
 
@@ -148,7 +226,8 @@ During development and family testing we observed the following:
 - **MCP integration:** Hermes successfully registered `doctor_context` MCP tools and invoked `health_chat_guard` in CLI tests, returning profile fields (name, role, location, etc.) from the backend context builder.
 - **Telegram path:** After configuring Gateway, `channel_prompts`, and `SOUL.md` platform rules, the bot could answer basic profile questions when MCP was loaded; when MCP was missing or the wrong tool was used, the bot correctly reported that the health tool was unavailable instead of inventing data.
 - **Account identity:** Using a stable `userId` (email document id) aligned Firestore data with MCP allowlist entries.
-- **Daily report pipeline:** Backend route `/internal/cron/daily-report` implemented; trigger script and Hermes cron registration documented; dry-run supported before live send.
+- **Backend services:** Express server with `contextBuilderService`, `reportService`, `dailyReportCronService`, and Telegram binding/webhook routes; mobile app uses the same Firestore data via `/api/*` JWT routes.
+- **Daily report pipeline:** `POST /internal/cron/daily-report` batch job tested with dry-run and live Telegram send; Hermes cron trigger script documented.
 
 ### Limitations discovered
 
@@ -189,8 +268,9 @@ This project fits **Track A — STEM Innovation**, combining **AI/IT** with **he
 
 1. Nous Research. *Hermes Agent documentation.* https://hermes-agent.nousresearch.com/docs/  
 2. Anthropic. *Model Context Protocol.* https://modelcontextprotocol.io/  
-3. Project repository: https://github.com/JeffRen1977/hermes_ai_doctor  
-4. Telegram Bot API. https://core.telegram.org/bots/api  
+3. Project repository (Hermes integration): https://github.com/JeffRen1977/hermes_ai_doctor  
+4. Doctor-agent backend repository: https://github.com/JeffRen1977/ai-doctor-agent  
+5. Telegram Bot API. https://core.telegram.org/bots/api  
 
 ---
 
