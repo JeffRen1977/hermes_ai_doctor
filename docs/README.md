@@ -21,14 +21,14 @@
 | [doctor-agent-backend.env.example](hermes/doctor-agent-backend.env.example) | Backend env template (copy to `ai-doctor-agent/backend/.env`) |
 | [skills/](hermes/skills/) | Hermes skill drafts (daily report, lab extraction) |
 
-## CAST competition (`competition/`)
+## CAST (`CAST/`)
 
 | Document | Purpose |
 |----------|---------|
-| [CAST_Research_Paper_hermes_ai_doctor.md](competition/CAST_Research_Paper_hermes_ai_doctor.md) | Research paper draft |
-| [CAST_Presentation_Outline_hermes_ai_doctor.md](competition/CAST_Presentation_Outline_hermes_ai_doctor.md) | Slide outline |
-| [CAST_Install_Guide_New_Computer.md](competition/CAST_Install_Guide_New_Computer.md) | Clone from GitHub and install on a new laptop |
-| [CAST_Student_Mentor_Guide.md](competition/CAST_Student_Mentor_Guide.md) | Student & mentor guide (includes run instructions) |
+| [CAST_Research_Paper_hermes_ai_doctor.md](CAST/CAST_Research_Paper_hermes_ai_doctor.md) | Research paper draft |
+| [CAST_Presentation_Outline_hermes_ai_doctor.md](CAST/CAST_Presentation_Outline_hermes_ai_doctor.md) | Slide outline |
+| [CAST_Install_Guide_New_Computer.md](CAST/CAST_Install_Guide_New_Computer.md) | Clone from GitHub and install on a new laptop |
+| [CAST_Student_Mentor_Guide.md](CAST/CAST_Student_Mentor_Guide.md) | Student & mentor guide (includes run instructions) |
 
 ## Runnable code
 

@@ -222,7 +222,7 @@ See: `../hermes/DAILY_REPORT_RUNBOOK.md`
 | `mcp-doctor-agent-bridge/src/index.js` | Developers | Registers MCP tools |
 | `mcp-doctor-agent-bridge/src/doctorContextTools.js` | Developers | Guard logic + Firebase calls |
 | `docs/hermes/M3_tool_call_strategy.md` | Students | When to call which tool |
-| `docs/competition/` | CAST team | Paper + slides + this guide |
+| `docs/CAST/` | CAST team | Paper + slides + this guide |
 | `ai-doctor-agent/` | Mentors only | Sibling repo — clone next to `hermes/`; not tracked in this repo |
 
 **GitHub public repo** (`hermes_ai_doctor`) has bridge + docs. The **doctor-agent backend** lives in a **sibling repo** (`ai-doctor-agent`) — clone it next to `hermes/` on your laptop.
@@ -239,7 +239,7 @@ This section is the **step-by-step runbook** for mentors. Students can follow al
 ~/Documents/
 ├── hermes/                          # This repo
 │   ├── docs/                        # All reference documentation
-│   │   ├── competition/             # CAST materials (this guide)
+│   │   ├── CAST/                      # CAST materials (this guide)
 │   │   └── hermes/                  # Runbooks, M3 templates, skills
 │   └── mcp-doctor-agent-bridge/     # Runnable MCP server + scripts
 └── ai-doctor-agent/                 # Doctor-agent backend (Node + Firebase)
