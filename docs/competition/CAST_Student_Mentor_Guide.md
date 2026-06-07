@@ -24,7 +24,7 @@
 
 **Disclaimer:** This is an **education / innovation project**, not a medical device. Always tell judges: *“See a doctor for diagnosis and emergencies.”*
 
-**Mentors — to install and run everything:** jump to **§6 How to run the project**.
+**Mentors — to install on a new laptop:** start with [`CAST_Install_Guide_New_Computer.md`](CAST_Install_Guide_New_Computer.md), then **§6 How to run the project** below for deeper detail.
 
 ---
 

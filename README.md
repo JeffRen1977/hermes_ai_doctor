@@ -8,6 +8,7 @@ Integration between **[Nous Hermes Agent](https://github.com/NousResearch/hermes
 |------|----------|
 | Install MCP bridge | [`mcp-doctor-agent-bridge/README.md`](mcp-doctor-agent-bridge/README.md) |
 | Clone doctor-agent backend | Sibling repo: `../ai-doctor-agent` |
+| Install on a new computer | [`docs/competition/CAST_Install_Guide_New_Computer.md`](docs/competition/CAST_Install_Guide_New_Computer.md) |
 | Full setup & run | [`docs/competition/CAST_Student_Mentor_Guide.md`](docs/competition/CAST_Student_Mentor_Guide.md) §6 |
 
 ## Documentation
