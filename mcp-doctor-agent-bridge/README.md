@@ -59,7 +59,7 @@ This service uses **stdio transport** and is normally started by the Hermes Agen
   "medications": true,
   "vitalsRecent": true,
   "chatRecent": true,
-  "language": "zh"
+  "language": "en"
 }
 ```
 

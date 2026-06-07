@@ -26,8 +26,12 @@ These three variables apply on the **Node process side** (Railway service / loca
 | `INTERNAL_CRON_BEARER_TOKEN` | Long random secret (e.g. `openssl rand -hex 32`). Do not reuse DB password or bot token. |
 | `CRON_DAILY_REPORT_USER_EMAILS` | Comma-separated emails, no spaces, e.g. `jianfengren.sd@gmail.com`. Must match Firestore `userSettings` doc id / `userId`. |
 | `TELEGRAM_BOT_TOKEN` | Bot for **`sendMessage`** (@BotFather token). User must have started the bot; `chat_id` from **`integrations.telegramChatId`**. May differ from Hermes chat bot token. |
+| `CRON_DAILY_REPORT_LANGUAGE` | `en` or `zh` (default **`en`**). Controls daily report narrative language sent to Telegram. |
 
 4. **Save** → Railway redeploys. Wait until healthy.
+
+   **Important:** Railway deploys the **`release`** branch of `ai-doctor-agent` (see `railway.json`). Merge fixes into **`release`** and push — pushing only to **`main`** does not update production until `release` is updated.
+
 5. Note public HTTPS base URL, e.g. `https://doctor-agent-production-xxxx.up.railway.app`. Daily report URL:
 
    `https://<your-host>/internal/cron/daily-report`
